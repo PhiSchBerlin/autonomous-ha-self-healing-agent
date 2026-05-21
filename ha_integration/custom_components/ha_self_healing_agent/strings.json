@@ -1,0 +1,73 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Self-Healing Agent einrichten",
+        "description": "Verbinde Home Assistant mit dem laufenden Self-Healing Agent Backend.",
+        "data": {
+          "agent_url": "Agent-URL",
+          "agent_mode": "Betriebsmodus",
+          "scan_interval": "Scan-Intervall (Sekunden)"
+        },
+        "data_description": {
+          "agent_url": "URL des Agent-Backends (z.B. http://localhost:8765)",
+          "agent_mode": "advisory = nur Empfehlungen, approval = menschliche Bestätigung, autonomous = selbstständig",
+          "scan_interval": "Wie oft der Agent Logs analysieren soll (in Sekunden)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Agent nicht möglich. Läuft das Backend?",
+      "invalid_response": "Agent antwortet mit ungültigem Status.",
+      "unknown": "Unbekannter Fehler. Bitte Logs prüfen."
+    },
+    "abort": {
+      "already_configured": "Der Agent ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Agent-Einstellungen",
+        "data": {
+          "agent_mode": "Betriebsmodus",
+          "scan_interval": "Scan-Intervall (Sekunden)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "agent_status": {
+        "name": "Agent Status",
+        "state": {
+          "online": "Online",
+          "offline": "Offline"
+        }
+      },
+      "agent_mode": {"name": "Agent Modus"},
+      "agent_version": {"name": "Agent Version"},
+      "findings_count": {"name": "Erkannte Findings"},
+      "critical_findings": {"name": "Kritische Findings"},
+      "security_issues": {"name": "Security Issues"},
+      "risk_score": {"name": "Risiko-Score"},
+      "pending_approvals": {"name": "Ausstehende Genehmigungen"},
+      "repairs_applied": {"name": "Angewendete Reparaturen"},
+      "knowledge_entries": {"name": "Wissensdatenbank-Einträge"}
+    }
+  },
+  "issues": {
+    "findings_detected": {
+      "title": "HA Self-Healing Agent: Findings erkannt",
+      "description": "Der Agent hat {count} Finding(s) in Ihrer Home Assistant Konfiguration erkannt. Öffnen Sie das Agent-Dashboard für Details und Reparaturvorschläge."
+    },
+    "security_critical": {
+      "title": "Kritisches Sicherheitsproblem erkannt",
+      "description": "Der Security-Agent hat ein kritisches Sicherheitsproblem erkannt: {title}. Sofortige Überprüfung empfohlen."
+    },
+    "approval_required": {
+      "title": "Reparatur-Genehmigung erforderlich",
+      "description": "Eine Reparatur-Aktion wartet auf Ihre Genehmigung: {title}. Verwenden Sie den ha_self_healing_agent.approve_repair oder ha_self_healing_agent.reject_repair Service."
+    }
+  }
+}

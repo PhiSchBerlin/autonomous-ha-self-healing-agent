@@ -1,0 +1,84 @@
+name: "HA Self-Healing Agent"
+description: >
+  Autonomer KI-Agent zur Selbstheilung und Sicherheitsüberwachung von Home Assistant.
+  Analysiert Logs, erkennt Konfigurationsfehler und schlägt Reparaturen vor —
+  immer mit menschlicher Kontrolle.
+version: "1.4.0"
+slug: ha_self_healing_agent
+url: "https://github.com/PhiSchBerlin/autonomous-ha-self-healing-agent"
+arch:
+  - amd64
+  - aarch64
+startup: services
+boot: auto
+init: false
+
+# ------------------------------------------------------------------
+# Netzwerk
+# ------------------------------------------------------------------
+ports:
+  8765/tcp: 8765
+  8501/tcp: 8501
+ports_description:
+  8765/tcp: "Agent API (FastAPI)"
+  8501/tcp: "Dashboard (Streamlit)"
+
+# ------------------------------------------------------------------
+# Ingress — zeigt "Öffnen"-Button auf der HA-Addon-Infoseite
+# ------------------------------------------------------------------
+ingress: true
+ingress_port: 8501
+ingress_stream: true
+
+# ------------------------------------------------------------------
+# Zugriff auf Home Assistant
+# ------------------------------------------------------------------
+homeassistant_api: true
+hassio_api: true
+hassio_role: default
+
+# ------------------------------------------------------------------
+# Host-Zugriff
+# ------------------------------------------------------------------
+host_network: false
+host_pid: false
+apparmor: true
+
+# ------------------------------------------------------------------
+# Optionen (konfigurierbar im Addon-UI)
+# ------------------------------------------------------------------
+options:
+  agent_mode: "advisory"
+  llm_backend_type: "ollama"
+  llm_model: "qwen2.5-coder:32b"
+  llm_base_url: "http://192.168.178.200:11434"
+  llm_fallback_base_url: "http://192.168.178.32:11434"
+  llm_fallback_model: "deepseek-r1:7b"
+  llm_cloud_enabled: false
+  llm_anonymize_sensitive_data: true
+  log_level: "INFO"
+  approval_timeout_seconds: 3600
+  allow_autonomous_file_writes: false
+  dashboard_refresh_seconds: 30
+
+schema:
+  agent_mode: "list(advisory|approval|autonomous)"
+  llm_backend_type: "list(ollama|lm_studio|vllm|local_ai|tabby_api|llama_cpp|anthropic|openai|gemini|openrouter)"
+  llm_model: str
+  llm_base_url: url
+  llm_fallback_base_url: url?
+  llm_fallback_model: str?
+  llm_cloud_enabled: bool
+  llm_anonymize_sensitive_data: bool
+  llm_api_key: str?
+  log_level: "list(DEBUG|INFO|WARNING|ERROR)"
+  approval_timeout_seconds: int(60,86400)
+  allow_autonomous_file_writes: bool
+  dashboard_refresh_seconds: int(10,300)
+
+# ------------------------------------------------------------------
+# Persistente Datenspeicherung
+# ------------------------------------------------------------------
+map:
+  - config:rw
+  - data:rw

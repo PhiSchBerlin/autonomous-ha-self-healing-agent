@@ -1,0 +1,142 @@
+# HA Self-Healing & Security AI Agent — Docker Compose Stack
+#
+# Dienste:
+#   agent      — FastAPI-Backend (Port 8765)
+#   dashboard  — Streamlit-Dashboard (Port 8501)
+#   prometheus — Metriken-Scraping (Port 9090)
+#   grafana    — Visualisierung (Port 3000)
+#
+# Konfiguration: .env (siehe .env.example)
+# Starten:       docker compose up -d
+# Logs:          docker compose logs -f agent
+
+services:
+
+  # ------------------------------------------------------------------
+  # Haupt-Agent (FastAPI)
+  # ------------------------------------------------------------------
+  agent:
+    build:
+      context: .
+      target: runtime
+    image: ha-self-healing-agent:latest
+    container_name: ha-agent
+    restart: unless-stopped
+    ports:
+      - "${AGENT_PORT:-8765}:8765"
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8765"
+    volumes:
+      - ${HA_CONFIG_PATH:-/path/to/homeassistant/config}:/ha-config:ro
+      - agent_data:/data
+    networks:
+      - ha-agent-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      - chromadb
+
+  # ------------------------------------------------------------------
+  # Streamlit Dashboard
+  # ------------------------------------------------------------------
+  dashboard:
+    build:
+      context: .
+      target: dashboard
+    image: ha-self-healing-agent:latest
+    container_name: ha-agent-dashboard
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    environment:
+      AGENT_API_URL: "http://agent:8765"
+      DASHBOARD_REFRESH_SECONDS: "${DASHBOARD_REFRESH_SECONDS:-30}"
+    networks:
+      - ha-agent-net
+    depends_on:
+      agent:
+        condition: service_healthy
+
+  # ------------------------------------------------------------------
+  # ChromaDB (Vector Store für RAG)
+  # ------------------------------------------------------------------
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    container_name: ha-agent-chromadb
+    restart: unless-stopped
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+      CHROMA_SERVER_AUTH_CREDENTIALS_FILE: ""
+    volumes:
+      - chromadb_data:/chroma/chroma
+    networks:
+      - ha-agent-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ------------------------------------------------------------------
+  # Prometheus (Metriken-Scraping)
+  # ------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    container_name: ha-agent-prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    networks:
+      - ha-agent-net
+    depends_on:
+      - agent
+
+  # ------------------------------------------------------------------
+  # Grafana (Visualisierung)
+  # ------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.3.2
+    container_name: ha-agent-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-changeme}"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: "/var/lib/grafana/dashboards/ha-agent.json"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - ha-agent-net
+    depends_on:
+      - prometheus
+
+volumes:
+  agent_data:
+  chromadb_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  ha-agent-net:
+    driver: bridge

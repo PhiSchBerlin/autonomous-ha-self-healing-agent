@@ -1,0 +1,73 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up HA Self-Healing Agent",
+        "description": "Connect Home Assistant to the running Self-Healing Agent backend.",
+        "data": {
+          "agent_url": "Agent URL",
+          "agent_mode": "Operation mode",
+          "scan_interval": "Scan interval (seconds)"
+        },
+        "data_description": {
+          "agent_url": "URL of the agent backend (e.g. http://localhost:8765)",
+          "agent_mode": "advisory = recommendations only, approval = human confirmation required, autonomous = self-applying",
+          "scan_interval": "How often the agent should analyze logs (in seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to agent backend. Is it running?",
+      "invalid_response": "Agent responded with an invalid status.",
+      "unknown": "Unknown error. Please check the logs."
+    },
+    "abort": {
+      "already_configured": "This agent is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Agent settings",
+        "data": {
+          "agent_mode": "Operation mode",
+          "scan_interval": "Scan interval (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "agent_status": {
+        "name": "Agent Status",
+        "state": {
+          "online": "Online",
+          "offline": "Offline"
+        }
+      },
+      "agent_mode": {"name": "Agent Mode"},
+      "agent_version": {"name": "Agent Version"},
+      "findings_count": {"name": "Detected Findings"},
+      "critical_findings": {"name": "Critical Findings"},
+      "security_issues": {"name": "Security Issues"},
+      "risk_score": {"name": "Risk Score"},
+      "pending_approvals": {"name": "Pending Approvals"},
+      "repairs_applied": {"name": "Applied Repairs"},
+      "knowledge_entries": {"name": "Knowledge Base Entries"}
+    }
+  },
+  "issues": {
+    "findings_detected": {
+      "title": "HA Self-Healing Agent: Findings detected",
+      "description": "The agent detected {count} finding(s) in your Home Assistant configuration. Open the agent dashboard for details and repair suggestions."
+    },
+    "security_critical": {
+      "title": "Critical security issue detected",
+      "description": "The security agent detected a critical security issue: {title}. Immediate review recommended."
+    },
+    "approval_required": {
+      "title": "Repair approval required",
+      "description": "A repair action is waiting for your approval: {title}. Use the ha_self_healing_agent.approve_repair or ha_self_healing_agent.reject_repair service."
+    }
+  }
+}

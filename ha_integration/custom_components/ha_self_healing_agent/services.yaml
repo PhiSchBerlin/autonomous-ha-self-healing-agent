@@ -1,0 +1,72 @@
+run_log_analysis:
+  name: Log-Analyse starten
+  description: Startet eine vollständige Log-Analyse des Home Assistant Systems.
+  fields:
+    logs:
+      name: Log-Einträge
+      description: Optional – Liste von Log-Einträgen als JSON. Leer lässt den Agent die Logs selbst abrufen.
+      required: false
+      example: []
+      selector:
+        object:
+
+run_security_scan:
+  name: Security-Scan starten
+  description: Führt einen vollständigen Sicherheits-Audit der HA-Konfiguration durch.
+  fields:
+    ha_config_path:
+      name: Konfigurationspfad
+      description: Pfad zum HA-Konfigurationsverzeichnis.
+      required: false
+      default: /config
+      example: /config
+      selector:
+        text:
+
+approve_repair:
+  name: Reparatur genehmigen
+  description: Genehmigt eine ausstehende Reparatur-Aktion (nur im Approval-Modus).
+  fields:
+    repair_action_id:
+      name: Reparatur-ID
+      description: Die UUID der zu genehmigenden RepairAction.
+      required: true
+      example: "550e8400-e29b-41d4-a716-446655440000"
+      selector:
+        text:
+    reason:
+      name: Begründung
+      description: Optionale Begründung für die Genehmigung.
+      required: false
+      selector:
+        text:
+
+reject_repair:
+  name: Reparatur ablehnen
+  description: Lehnt eine ausstehende Reparatur-Aktion ab.
+  fields:
+    repair_action_id:
+      name: Reparatur-ID
+      description: Die UUID der abzulehnenden RepairAction.
+      required: true
+      example: "550e8400-e29b-41d4-a716-446655440000"
+      selector:
+        text:
+    reason:
+      name: Begründung
+      description: Pflichtbegründung für die Ablehnung.
+      required: false
+      selector:
+        text:
+
+run_full_audit:
+  name: Vollständigen Audit starten
+  description: Startet Log-Analyse, Config-Analyse und Security-Scan parallel.
+  fields:
+    ha_config_path:
+      name: Konfigurationspfad
+      description: Pfad zum HA-Konfigurationsverzeichnis.
+      required: false
+      default: /config
+      selector:
+        text:

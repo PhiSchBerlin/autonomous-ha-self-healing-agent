@@ -1,0 +1,41 @@
+# Versionskontrolle
+.git
+.gitignore
+
+# Python-Caches
+__pycache__
+*.py[cod]
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info
+dist
+build
+.venv
+venv
+
+# Sensible Dateien — NIEMALS ins Image
+.env
+*.env
+secrets.yaml
+*.key
+*.pem
+*.p12
+
+# Entwicklungsdaten (werden als Volumes gemountet)
+/data
+*.db
+*.sqlite
+
+# Tests (nicht im Produktions-Image)
+tests/
+
+# Dokumentation und Sonstiges
+*.md
+LICENSE
+.DS_Store
+@Backups/
+
+# Deployment-Artefakte (werden zur Laufzeit via Volume gemountet)
+deploy/grafana/dashboards/*.json
