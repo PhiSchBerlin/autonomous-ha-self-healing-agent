@@ -255,10 +255,11 @@ def page_findings() -> None:
                 st.success(f"Scan abgeschlossen — {result.get('security_issues_count', 0)} LLM-Issues, {result.get('static_issues_count', 0)} statische Issues")
                 st.cache_data.clear()
 
-    # Zusammenfassung und Filterung
+    # Zusammenfassung
     summary = fetch_json("/api/v1/security/issues/summary")
-    if isinstance(summary, dict) and summary.get("total", 0) > 0:
-        total = summary["total"]
+    has_issues = isinstance(summary, dict) and summary.get("total", 0) > 0
+
+    if has_issues:
         cols = st.columns(5)
         cols[0].metric("🔴 Critical", summary.get("critical", 0))
         cols[1].metric("🟠 High", summary.get("high", 0))
@@ -266,35 +267,81 @@ def page_findings() -> None:
         cols[3].metric("🟢 Low", summary.get("low", 0))
         cols[4].metric("⚪ Info", summary.get("info", 0))
 
-        sev_filter = st.selectbox(
-            "Filtern nach Schweregrad",
-            ["Alle", "critical", "high", "medium", "low", "info"],
-            key="sec_sev_filter",
-        )
-        limit = st.slider("Maximale Anzahl anzeigen", 10, 500, 100, key="sec_limit")
+    # Severity-Filter als Checkboxen
+    st.markdown("**Schweregrad-Filter:**")
+    fc = st.columns(5)
+    show_critical = fc[0].checkbox("🔴 Critical", value=True, key="f_crit")
+    show_high     = fc[1].checkbox("🟠 High",     value=True, key="f_high")
+    show_medium   = fc[2].checkbox("🟡 Medium",   value=True, key="f_med")
+    show_low      = fc[3].checkbox("🟢 Low",      value=False, key="f_low")
+    show_info     = fc[4].checkbox("⚪ Info",      value=False, key="f_info")
 
-        params = f"?limit={limit}"
-        if sev_filter != "Alle":
-            params += f"&severity={sev_filter}"
-        security = fetch_json(f"/api/v1/security/issues{params}")
-    else:
-        security = fetch_json("/api/v1/security/issues?limit=100")
+    active_severities = {
+        sev for sev, active in [
+            ("critical", show_critical),
+            ("high", show_high),
+            ("medium", show_medium),
+            ("low", show_low),
+            ("info", show_info),
+        ] if active
+    }
 
-    if isinstance(security, list):
-        if not security:
-            st.info("Keine Security-Issues (noch kein Scan gelaufen oder alle gefiltert)")
-        else:
-            st.caption(f"{len(security)} Issue(s) angezeigt (persistent gespeichert)")
-            for issue in security:
-                sev = issue.get("severity", "info")
-                icon = _severity_color(sev)
-                with st.expander(f"{icon} [{sev.upper()}] {issue.get('title', 'Unbekannt')}"):
-                    st.write(f"**Beschreibung:** {issue.get('description', '-')}")
-                    st.write(f"**Datei:** `{issue.get('file_path', '-')}`")
-                    st.write(f"**Zeile:** {issue.get('line_number', '-')}")
-                    st.write(f"**Risiko-Score:** {issue.get('risk_score', '-')}")
-    else:
+    limit = st.slider("Maximale Anzahl laden", 50, 2000, 500, key="sec_limit")
+    security = fetch_json(f"/api/v1/security/issues?limit={limit}")
+
+    if not isinstance(security, list):
         st.warning("Security-Endpunkt nicht erreichbar — bitte Addon neu starten")
+        return
+
+    # Client-seitige Filterung nach aktiven Schweregraden
+    filtered = [i for i in security if i.get("severity", "info").lower() in active_severities]
+
+    if not filtered:
+        st.info("Keine Issues für die gewählten Filter (oder noch kein Scan gelaufen)")
+        return
+
+    # Auswahlsteuerung
+    if "selected_issues" not in st.session_state:
+        st.session_state["selected_issues"] = set()
+
+    col_sel, col_info = st.columns([1, 3])
+    with col_sel:
+        if st.button("Alle auswählen", key="sel_all"):
+            st.session_state["selected_issues"] = {i.get("title", "") + str(i.get("line_number", "")) for i in filtered}
+            st.rerun()
+        if st.button("Auswahl aufheben", key="sel_none"):
+            st.session_state["selected_issues"] = set()
+            st.rerun()
+    with col_info:
+        n_sel = len(st.session_state["selected_issues"])
+        st.caption(f"{len(filtered)} Issues angezeigt · {n_sel} ausgewählt zur Reparatur")
+
+    if n_sel > 0:
+        if st.button(f"🔧 {n_sel} ausgewählte Issues reparieren lassen", type="primary"):
+            st.info("Reparatur-Funktion wird in einer zukünftigen Version implementiert.")
+
+    # Issue-Liste mit Checkbox je Eintrag
+    for issue in filtered:
+        sev = issue.get("severity", "info")
+        icon = _severity_color(sev)
+        title = issue.get("title", "Unbekannt")
+        issue_key = title + str(issue.get("line_number", ""))
+
+        col_chk, col_exp = st.columns([0.05, 0.95])
+        is_checked = issue_key in st.session_state["selected_issues"]
+        new_val = col_chk.checkbox("", value=is_checked, key=f"chk_{issue_key}", label_visibility="collapsed")
+        if new_val != is_checked:
+            if new_val:
+                st.session_state["selected_issues"].add(issue_key)
+            else:
+                st.session_state["selected_issues"].discard(issue_key)
+
+        with col_exp:
+            with st.expander(f"{icon} [{sev.upper()}] {title}"):
+                st.write(f"**Beschreibung:** {issue.get('description', '-')}")
+                st.write(f"**Datei:** `{issue.get('file_path', '-')}`")
+                st.write(f"**Zeile:** {issue.get('line_number', '-')}")
+                st.write(f"**Risiko-Score:** {issue.get('risk_score', '-')}")
 
     st.divider()
 
@@ -551,18 +598,28 @@ def page_knowledge() -> None:
     col_exp, col_imp = st.columns(2)
 
     with col_exp:
-        # Export direkt als Download-Button — kein Zwischenspeichern im Browser-State
-        try:
-            import httpx as _httpx
-            _resp = _httpx.get(f"{API_URL}/api/v1/knowledge/export", timeout=30.0)
+        # Export: Erst auf Knopfdruck laden, dann Download-Button zeigen
+        # (Direktes Laden beim Render überläuft Streamlits localStorage-Quota)
+        if st.button("📦 Export vorbereiten"):
+            try:
+                import httpx as _httpx
+                _resp = _httpx.get(f"{API_URL}/api/v1/knowledge/export", timeout=60.0)
+                _resp.raise_for_status()
+                st.session_state["kb_export_bytes"] = _resp.content
+                st.session_state["kb_export_ready"] = True
+            except Exception as _e:
+                st.error(f"Export nicht verfügbar: {_e}")
+                st.session_state["kb_export_ready"] = False
+
+        if st.session_state.get("kb_export_ready"):
             st.download_button(
                 label="📥 Export herunterladen (JSON)",
-                data=_resp.content,
+                data=st.session_state["kb_export_bytes"],
                 file_name="knowledge_export.json",
                 mime="application/json",
+                key="kb_dl_btn",
             )
-        except Exception as _e:
-            st.error(f"Export nicht verfügbar: {_e}")
+            st.caption("Bereit zum Herunterladen")
 
     with col_imp:
         uploaded = st.file_uploader("📤 JSON importieren", type=["json"], key="kb_import")

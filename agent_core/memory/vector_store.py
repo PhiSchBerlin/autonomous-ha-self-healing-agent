@@ -61,11 +61,17 @@ class HAVectorStore:
             ) from exc
 
         import os
-        # ONNX-Modell-Cache auf persistentes /data-Volume legen, damit kein
-        # 79-MB-Download bei jedem Addon-Neustart nötig ist.
-        cache_dir = os.environ.get("CHROMA_CACHE_DIR", "/data/chroma_cache")
+        # ChromaDB lädt das ONNX-Modell nach ~/.cache/chroma/onnx_models/.
+        # Im Container ist ~ = /root, das nicht persistiert ist → 79-MB-Download
+        # bei jedem Neustart. Lösung: HOME auf /data zeigen, damit der Cache
+        # in /data/.cache/chroma liegt (persistiertes Volume).
+        data_dir = os.environ.get("DATA_PATH", "/data")
+        os.makedirs(data_dir, exist_ok=True)
+        os.environ.setdefault("HOME", data_dir)
+        # Zusätzlich XDG_CACHE_HOME setzen (wird von neueren ChromaDB-Versionen bevorzugt)
+        cache_dir = os.path.join(data_dir, ".cache")
         os.makedirs(cache_dir, exist_ok=True)
-        os.environ.setdefault("CHROMA_CACHE_DIR", cache_dir)
+        os.environ.setdefault("XDG_CACHE_HOME", cache_dir)
 
         self._client = chromadb.PersistentClient(
             path=self.persist_directory,
