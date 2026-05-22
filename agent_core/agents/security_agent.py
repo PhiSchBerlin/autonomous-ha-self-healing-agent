@@ -242,6 +242,13 @@ class SecurityAgent(BaseAgent):
             report.low_count,
         )
 
+        # Immer in den persistenten Store schreiben — auch beim Full Audit
+        try:
+            from security.store import set_latest_issues
+            set_latest_issues(issues)
+        except Exception as _exc:
+            logger.warning("Security-Store: Issues konnten nicht gespeichert werden: %s", _exc)
+
         return {
             "context": {
                 **state.context,
