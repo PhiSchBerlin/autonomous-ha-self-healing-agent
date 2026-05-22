@@ -31,6 +31,39 @@ class RollbackRequest(BaseModel):
     commit_hash: str | None = None
 
 
+def _security_issue_to_finding(issue: dict[str, Any]) -> dict[str, Any]:
+    """Konvertiert ein SecurityIssue-Dict in ein Finding-kompatibles Dict."""
+    check_type = issue.get("check_type", "")
+    severity = issue.get("severity", "medium")
+
+    # check_type → FindingCategory mapping
+    if any(k in check_type for k in ("injection", "yaml", "jinja", "shell", "eval")):
+        category = "config_error"
+    elif any(k in check_type for k in ("cve", "supply_chain", "dependency", "docker")):
+        category = "security"
+    else:
+        category = "security"
+
+    file_path = issue.get("file_path") or ""
+    return {
+        "id": issue.get("id", str(uuid4())),
+        "title": issue.get("title", "Security Issue"),
+        "description": issue.get("description", ""),
+        "severity": severity,
+        "category": category,
+        "source_agent": "security_scanner",
+        "confidence": min(1.0, max(0.0, issue.get("risk_score", 5.0) / 10.0)),
+        "affected_files": [file_path] if file_path else [],
+        "suggested_fix": issue.get("remediation") or "",
+        "risk_score": issue.get("risk_score", 5.0),
+        "metadata": {
+            "check_type": check_type,
+            "line_number": issue.get("line_number"),
+            "cve_ids": issue.get("cve_ids", []),
+        },
+    }
+
+
 def _build_llm_and_orchestrator():
     from agent_core.orchestrator import AgentOrchestrator
     from config.settings import get_settings
@@ -57,8 +90,9 @@ async def run_repair(request: RepairRequest) -> dict[str, Any]:
     from agent_core.repair_store import add_action
 
     orchestrator = _build_llm_and_orchestrator()
+    finding = _security_issue_to_finding(request.finding) if not request.finding.get("category") else request.finding
     result = await orchestrator.run_repair(
-        finding=request.finding,
+        finding=finding,
         ha_config_path=request.ha_config_path,
     )
 
@@ -102,9 +136,10 @@ async def repair_issues(request: RepairIssuesRequest) -> dict[str, Any]:
     results = []
 
     for issue in request.issues:
+        finding = _security_issue_to_finding(issue)
         try:
             result = await orchestrator.run_repair(
-                finding=issue,
+                finding=finding,
                 ha_config_path=request.ha_config_path,
             )
             action_id = add_action({
