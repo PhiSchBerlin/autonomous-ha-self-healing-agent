@@ -27,9 +27,16 @@ class OllamaBackend(BaseLLMBackend):
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
+            # connect: 10s Wartezeit für erste Verbindung (Modell lädt ggf. noch)
+            # read:    timeout_seconds für die eigentliche Antwort (lange Generierung)
             self._client = httpx.AsyncClient(
                 base_url=self._base_url,
-                timeout=self.config.timeout_seconds,
+                timeout=httpx.Timeout(
+                    connect=10.0,
+                    read=float(self.config.timeout_seconds),
+                    write=30.0,
+                    pool=5.0,
+                ),
             )
         return self._client
 
