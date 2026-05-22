@@ -114,6 +114,7 @@ async def get_security_issues(
 
     return [
         {
+            "id": str(i.id),
             "check_type": str(i.check_type),
             "title": i.title,
             "severity": str(i.severity),
@@ -121,6 +122,8 @@ async def get_security_issues(
             "file_path": getattr(i, "file_path", "") or "",
             "line_number": getattr(i, "line_number", None),
             "risk_score": i.risk_score,
+            "remediation": getattr(i, "remediation", None),
+            "cve_ids": getattr(i, "cve_ids", []),
         }
         for i in issues
     ]

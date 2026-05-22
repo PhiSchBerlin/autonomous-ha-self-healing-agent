@@ -19,6 +19,11 @@ class ApprovalDecision(BaseModel):
     reason: str | None = None
 
 
+class RepairIssuesRequest(BaseModel):
+    issues: list[dict[str, Any]]
+    ha_config_path: str = "/config"
+
+
 class RollbackRequest(BaseModel):
     ha_config_path: str
     tag_name: str | None = None
@@ -57,6 +62,65 @@ async def run_repair(request: RepairRequest) -> dict[str, Any]:
         "duration_seconds": result.duration_seconds,
         "audit_trail": [str(uid) for uid in result.audit_trail],
         "errors": result.errors,
+    }
+
+
+@router.post("/issues", status_code=status.HTTP_202_ACCEPTED)
+async def repair_issues(request: RepairIssuesRequest) -> dict[str, Any]:
+    """Startet den Repair-Workflow für eine Liste von Security-Issues.
+
+    Jedes Issue wird sequenziell als Finding an den Orchestrator übergeben.
+    Gibt eine Zusammenfassung aller Repair-Läufe zurück.
+    """
+    from agent_core.orchestrator import AgentOrchestrator
+    from config.settings import get_settings
+    from llm_backends.base import LLMBackendConfig
+    from llm_backends.factory import create_llm_backend
+    from models.enums import AgentMode
+
+    if not request.issues:
+        return {"total": 0, "results": []}
+
+    settings = get_settings()
+    llm_config = LLMBackendConfig(
+        backend_type=settings.llm.backend_type,
+        model=settings.llm.model,
+        base_url=settings.llm.base_url,
+        api_key=settings.llm.api_key.get_secret_value() if settings.llm.api_key else None,
+        fallback_base_url=settings.llm.fallback_base_url,
+        fallback_model=settings.llm.fallback_model,
+    )
+    llm = create_llm_backend(llm_config)
+    orchestrator = AgentOrchestrator(llm, mode=AgentMode(settings.agent.mode))
+
+    results = []
+    for issue in request.issues:
+        try:
+            result = await orchestrator.run_repair(
+                finding=issue,
+                ha_config_path=request.ha_config_path,
+            )
+            results.append({
+                "issue_id": issue.get("id", ""),
+                "issue_title": issue.get("title", ""),
+                "run_id": str(result.run_id),
+                "success": result.success,
+                "repairs_proposed": result.repairs_proposed_count,
+                "repairs_applied": result.repairs_applied_count,
+                "errors": result.errors,
+            })
+        except Exception as exc:
+            results.append({
+                "issue_id": issue.get("id", ""),
+                "issue_title": issue.get("title", ""),
+                "success": False,
+                "errors": [str(exc)],
+            })
+
+    return {
+        "total": len(request.issues),
+        "successful": sum(1 for r in results if r.get("success")),
+        "results": results,
     }
 
 

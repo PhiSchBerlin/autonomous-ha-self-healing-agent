@@ -300,41 +300,63 @@ def page_findings() -> None:
         st.info("Keine Issues für die gewählten Filter (oder noch kein Scan gelaufen)")
         return
 
-    # Auswahlsteuerung
-    if "selected_issues" not in st.session_state:
-        st.session_state["selected_issues"] = set()
+    # Auswahlsteuerung — Schlüssel ist die Issue-ID (UUID), Fallback auf title+line
+    if "selected_issue_ids" not in st.session_state:
+        st.session_state["selected_issue_ids"] = set()
+
+    def _issue_key(issue: dict) -> str:
+        return issue.get("id") or (issue.get("title", "") + str(issue.get("line_number", "")))
 
     col_sel, col_info = st.columns([1, 3])
     with col_sel:
         if st.button("Alle auswählen", key="sel_all"):
-            st.session_state["selected_issues"] = {i.get("title", "") + str(i.get("line_number", "")) for i in filtered}
+            st.session_state["selected_issue_ids"] = {_issue_key(i) for i in filtered}
             st.rerun()
         if st.button("Auswahl aufheben", key="sel_none"):
-            st.session_state["selected_issues"] = set()
+            st.session_state["selected_issue_ids"] = set()
             st.rerun()
     with col_info:
-        n_sel = len(st.session_state["selected_issues"])
+        n_sel = len(st.session_state["selected_issue_ids"])
         st.caption(f"{len(filtered)} Issues angezeigt · {n_sel} ausgewählt zur Reparatur")
 
     if n_sel > 0:
         if st.button(f"🔧 {n_sel} ausgewählte Issues reparieren lassen", type="primary"):
-            st.info("Reparatur-Funktion wird in einer zukünftigen Version implementiert.")
+            selected_keys = st.session_state["selected_issue_ids"]
+            issues_to_repair = [i for i in filtered if _issue_key(i) in selected_keys]
+            with st.spinner(f"Starte Reparatur für {len(issues_to_repair)} Issues..."):
+                result = post_json("/api/v1/repair/issues", {
+                    "issues": issues_to_repair,
+                    "ha_config_path": "/config",
+                })
+            if result:
+                ok = result.get("successful", 0)
+                total = result.get("total", 0)
+                st.success(f"Reparatur gestartet: {ok}/{total} erfolgreich angestossen")
+                for r in result.get("results", []):
+                    if r.get("success"):
+                        st.info(f"✅ {r.get('issue_title', '')} — {r.get('repairs_proposed', 0)} Reparatur(en) vorgeschlagen")
+                    else:
+                        errs = "; ".join(r.get("errors", []))
+                        st.warning(f"⚠️ {r.get('issue_title', '')} — {errs or 'Kein LLM erreichbar, statischer Scan läuft'}")
+                st.cache_data.clear()
+            else:
+                st.error("Repair-Endpunkt nicht erreichbar")
 
     # Issue-Liste mit Checkbox je Eintrag
     for issue in filtered:
         sev = issue.get("severity", "info")
         icon = _severity_color(sev)
         title = issue.get("title", "Unbekannt")
-        issue_key = title + str(issue.get("line_number", ""))
+        ikey = _issue_key(issue)
 
         col_chk, col_exp = st.columns([0.05, 0.95])
-        is_checked = issue_key in st.session_state["selected_issues"]
-        new_val = col_chk.checkbox("", value=is_checked, key=f"chk_{issue_key}", label_visibility="collapsed")
+        is_checked = ikey in st.session_state["selected_issue_ids"]
+        new_val = col_chk.checkbox("", value=is_checked, key=f"chk_{ikey}", label_visibility="collapsed")
         if new_val != is_checked:
             if new_val:
-                st.session_state["selected_issues"].add(issue_key)
+                st.session_state["selected_issue_ids"].add(ikey)
             else:
-                st.session_state["selected_issues"].discard(issue_key)
+                st.session_state["selected_issue_ids"].discard(ikey)
 
         with col_exp:
             with st.expander(f"{icon} [{sev.upper()}] {title}"):
@@ -342,6 +364,10 @@ def page_findings() -> None:
                 st.write(f"**Datei:** `{issue.get('file_path', '-')}`")
                 st.write(f"**Zeile:** {issue.get('line_number', '-')}")
                 st.write(f"**Risiko-Score:** {issue.get('risk_score', '-')}")
+                if issue.get("remediation"):
+                    st.write(f"**Empfohlene Massnahme:** {issue['remediation']}")
+                if issue.get("cve_ids"):
+                    st.write(f"**CVEs:** {', '.join(issue['cve_ids'])}")
 
     st.divider()
 
