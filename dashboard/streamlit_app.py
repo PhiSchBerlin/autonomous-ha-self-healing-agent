@@ -390,58 +390,195 @@ def page_findings() -> None:
 # Seite: Genehmigungen
 # ---------------------------------------------------------------------------
 
+_STATUS_ICONS = {
+    "applied": "✅",
+    "proposed": "📋",
+    "validated": "🔬",
+    "approved": "👍",
+    "rejected": "❌",
+    "rolled_back": "↩️",
+    "failed": "💥",
+    "simulated": "🧪",
+}
+
+_RISK_ICONS = {"low": "🟢", "medium": "🟡", "high": "🟠", "critical": "🔴"}
+
+
 def page_approvals() -> None:
-    st.header("🔧 Ausstehende Genehmigungsanfragen")
+    st.header("🔧 Genehmigungen")
 
-    repair_data = fetch_json("/api/v1/repair/history")
-    repairs = repair_data.get("commits", []) if isinstance(repair_data, dict) else []
+    # ── Bereich 1: Security-Issues auswählen & Reparatur starten ────────────
+    st.subheader("1 — Security-Issues zur Reparatur auswählen")
 
-    if repair_data is None:
-        st.error("Backend nicht erreichbar")
+    summary = fetch_json("/api/v1/security/issues/summary")
+    has_issues = isinstance(summary, dict) and summary.get("total", 0) > 0
+
+    if has_issues:
+        cols = st.columns(5)
+        cols[0].metric("🔴 Critical", summary.get("critical", 0))
+        cols[1].metric("🟠 High", summary.get("high", 0))
+        cols[2].metric("🟡 Medium", summary.get("medium", 0))
+        cols[3].metric("🟢 Low", summary.get("low", 0))
+        cols[4].metric("⚪ Info", summary.get("info", 0))
+    else:
+        st.info("Noch kein Security-Scan gelaufen. Bitte auf der Findings-Seite einen Scan starten.")
+
+    # Filterzeile
+    fc = st.columns([1, 1, 1, 1, 1, 2])
+    show_critical = fc[0].checkbox("🔴 Critical", value=True, key="ap_crit")
+    show_high     = fc[1].checkbox("🟠 High",     value=True, key="ap_high")
+    show_medium   = fc[2].checkbox("🟡 Medium",   value=True, key="ap_med")
+    show_low      = fc[3].checkbox("🟢 Low",      value=False, key="ap_low")
+    show_info     = fc[4].checkbox("⚪ Info",      value=False, key="ap_info")
+    limit_ap = fc[5].slider("Max. laden", 50, 2000, 500, key="ap_limit")
+
+    active_severities = {
+        sev for sev, active in [
+            ("critical", show_critical), ("high", show_high),
+            ("medium", show_medium), ("low", show_low), ("info", show_info),
+        ] if active
+    }
+
+    security = fetch_json(f"/api/v1/security/issues?limit={limit_ap}")
+    if not isinstance(security, list):
+        st.warning("Security-Endpunkt nicht erreichbar")
+    else:
+        filtered_sec = [i for i in security if i.get("severity", "info").lower() in active_severities]
+
+        if not filtered_sec:
+            st.info("Keine Issues für die gewählten Filter")
+        else:
+            if "ap_selected_ids" not in st.session_state:
+                st.session_state["ap_selected_ids"] = set()
+
+            def _ikey(issue: dict) -> str:
+                return issue.get("id") or (issue.get("title", "") + str(issue.get("line_number", "")))
+
+            sel_col, info_col = st.columns([1, 3])
+            with sel_col:
+                if st.button("Alle auswählen", key="ap_sel_all"):
+                    st.session_state["ap_selected_ids"] = {_ikey(i) for i in filtered_sec}
+                    st.rerun()
+                if st.button("Auswahl aufheben", key="ap_sel_none"):
+                    st.session_state["ap_selected_ids"] = set()
+                    st.rerun()
+            with info_col:
+                n_ap_sel = len(st.session_state["ap_selected_ids"])
+                st.caption(f"{len(filtered_sec)} Issues angezeigt · {n_ap_sel} ausgewählt")
+
+            if n_ap_sel > 0:
+                if st.button(f"🔧 {n_ap_sel} Issues reparieren lassen", type="primary", key="ap_repair_btn"):
+                    selected_keys = st.session_state["ap_selected_ids"]
+                    issues_to_repair = [i for i in filtered_sec if _ikey(i) in selected_keys]
+                    with st.spinner(f"Starte Repair-Workflow für {len(issues_to_repair)} Issues..."):
+                        result = post_json("/api/v1/repair/issues", {
+                            "issues": issues_to_repair,
+                            "ha_config_path": "/config",
+                        })
+                    if result:
+                        ok = result.get("successful", 0)
+                        total = result.get("total", 0)
+                        st.success(f"Repair-Workflows gestartet: {ok}/{total} angestossen")
+                        for r in result.get("results", []):
+                            if r.get("success"):
+                                st.info(f"✅ {r.get('issue_title', '')} — {r.get('repairs_proposed', 0)} Reparatur(en) vorgeschlagen")
+                            else:
+                                errs = "; ".join(r.get("errors", []))
+                                st.warning(f"⚠️ {r.get('issue_title', '')} — {errs or 'Kein LLM erreichbar'}")
+                        st.session_state["ap_selected_ids"] = set()
+                        st.cache_data.clear()
+
+            for issue in filtered_sec:
+                sev = issue.get("severity", "info")
+                icon = _severity_color(sev)
+                title = issue.get("title", "Unbekannt")
+                ikey = _ikey(issue)
+
+                chk_col, exp_col = st.columns([0.05, 0.95])
+                is_checked = ikey in st.session_state.get("ap_selected_ids", set())
+                new_val = chk_col.checkbox("", value=is_checked, key=f"ap_chk_{ikey}", label_visibility="collapsed")
+                if new_val != is_checked:
+                    if new_val:
+                        st.session_state["ap_selected_ids"].add(ikey)
+                    else:
+                        st.session_state["ap_selected_ids"].discard(ikey)
+
+                with exp_col:
+                    with st.expander(f"{icon} [{sev.upper()}] {title}"):
+                        st.write(f"**Datei:** `{issue.get('file_path', '-')}`  |  **Zeile:** {issue.get('line_number', '-')}  |  **Risiko:** {issue.get('risk_score', '-')}")
+                        st.write(f"**Beschreibung:** {issue.get('description', '-')}")
+                        if issue.get("remediation"):
+                            st.write(f"**Empfohlene Massnahme:** {issue['remediation']}")
+                        if issue.get("cve_ids"):
+                            st.write(f"**CVEs:** {', '.join(issue['cve_ids'])}")
+
+    st.divider()
+
+    # ── Bereich 2: Ausstehende RepairActions genehmigen/ablehnen ────────────
+    st.subheader("2 — Ausstehende Reparaturen genehmigen")
+
+    pending = fetch_json("/api/v1/repair/pending")
+    if not isinstance(pending, list):
+        st.warning("Repair-Endpunkt nicht erreichbar")
         return
-
-    pending = [r for r in repairs if isinstance(r, dict) and r.get("status") == "proposed"]
 
     if not pending:
-        st.success("✅ Keine ausstehenden Genehmigungsanfragen")
+        st.success("✅ Keine ausstehenden Reparatur-Genehmigungen")
         return
 
-    for repair in pending:
-        repair_id = repair.get("id", "")
-        title = repair.get("title", "Unbekannt")
-        risk = repair.get("risk_level", "unknown")
-        desc = repair.get("description", "-")
-        rationale = repair.get("rationale", "-")
+    st.caption(f"{len(pending)} ausstehende Reparatur(en)")
 
-        icon = {"low": "🟢", "medium": "🟡", "high": "🟠", "critical": "🔴"}.get(risk, "⚫")
-        with st.expander(f"{icon} **{title}** — Risiko: `{risk}`", expanded=True):
-            st.write(f"**Beschreibung:** {desc}")
-            st.write(f"**Begründung:** {rationale}")
+    for action in pending:
+        action_id = action.get("id", "")
+        title = action.get("title", "Unbekannt")
+        risk = action.get("risk_level", "unknown")
+        sev = action.get("finding_severity", "")
+        status_val = action.get("status", "proposed")
+        proposed_count = action.get("repairs_proposed", 0)
 
-            changes = repair.get("changes", [])
-            if changes:
-                st.write(f"**Betroffene Dateien:** {len(changes)}")
-                for ch in changes:
-                    st.code(ch.get("diff", ""), language="diff")
+        risk_icon = _RISK_ICONS.get(risk, "⚫")
+        sev_icon = _severity_color(sev) if sev else ""
+        status_icon = _STATUS_ICONS.get(status_val, "❓")
 
-            col_approve, col_reject = st.columns(2)
-            with col_approve:
-                if st.button(f"✅ Genehmigen", key=f"approve_{repair_id}"):
-                    result = post_json(f"/api/v1/repair/{repair_id}/approve", {})
-                    if result:
+        with st.expander(
+            f"{status_icon} {risk_icon} **{title}** — Status: `{status_val}` | {proposed_count} Reparatur(en) vorgeschlagen",
+            expanded=True,
+        ):
+            col_l, col_r = st.columns(2)
+            with col_l:
+                st.write(f"**Erstellt:** {action.get('created_at', '-')[:19].replace('T', ' ')}")
+                st.write(f"**Schweregrad:** {sev_icon} {sev.upper() if sev else '-'}")
+                st.write(f"**Betroffene Datei:** `{action.get('finding_file', '-')}`")
+                if action.get("finding_line"):
+                    st.write(f"**Zeile:** {action['finding_line']}")
+            with col_r:
+                st.write(f"**Beschreibung:** {action.get('description', '-')}")
+                if action.get("remediation_hint"):
+                    st.write(f"**Hinweis:** {action['remediation_hint']}")
+                if action.get("cve_ids"):
+                    st.write(f"**CVEs:** {', '.join(action['cve_ids'])}")
+                errs = action.get("errors", [])
+                if errs:
+                    st.write(f"**Fehler:** {'; '.join(errs)}")
+
+            if action.get("audit_trail"):
+                st.caption(f"Audit-Trail: {len(action['audit_trail'])} Einträge")
+
+            st.markdown("---")
+            approve_col, reject_col = st.columns(2)
+            with approve_col:
+                if st.button("✅ Genehmigen", key=f"ap_approve_{action_id}", type="primary"):
+                    res = post_json(f"/api/v1/repair/{action_id}/approve", {"approved": True})
+                    if res:
                         st.success("Genehmigt!")
                         st.cache_data.clear()
                         st.rerun()
-
-            with col_reject:
-                reject_reason = st.text_input("Ablehnungsgrund", key=f"reason_{repair_id}")
-                if st.button(f"❌ Ablehnen", key=f"reject_{repair_id}"):
-                    result = post_json(
-                        f"/api/v1/repair/{repair_id}/reject",
-                        {"reason": reject_reason},
-                    )
-                    if result:
-                        st.warning("Abgelehnt")
+            with reject_col:
+                reject_reason = st.text_input("Ablehnungsgrund (optional)", key=f"ap_reason_{action_id}")
+                if st.button("❌ Ablehnen", key=f"ap_reject_{action_id}"):
+                    res = post_json(f"/api/v1/repair/{action_id}/approve", {"approved": False, "reason": reject_reason})
+                    if res:
+                        st.warning("Abgelehnt und gespeichert")
                         st.cache_data.clear()
                         st.rerun()
 
@@ -454,52 +591,131 @@ def page_repair_history() -> None:
     st.header("📜 Reparaturhistorie")
 
     repair_data = fetch_json("/api/v1/repair/history")
-    repairs = repair_data.get("commits", []) if isinstance(repair_data, dict) else []
-
     if repair_data is None:
         st.error("Backend nicht erreichbar")
         return
 
-    if not repairs:
-        st.info("Noch keine Reparaturen durchgeführt")
-        return
+    actions = repair_data.get("commits", [])
+    git_commits = repair_data.get("git_commits", [])
+    backup_tags = repair_data.get("backup_tags", [])
 
-    # Statusfilter
-    all_statuses = sorted({r.get("status", "unknown") for r in repairs if isinstance(r, dict)})
-    selected = st.multiselect("Filter nach Status", all_statuses, default=all_statuses)
-    filtered = [r for r in repairs if isinstance(r, dict) and r.get("status") in selected]
+    # ── Zusammenfassung ──────────────────────────────────────────────────────
+    if actions:
+        status_counts: dict[str, int] = {}
+        for a in actions:
+            s = a.get("status", "unknown")
+            status_counts[s] = status_counts.get(s, 0) + 1
+        m_cols = st.columns(len(status_counts) or 1)
+        for idx, (s, cnt) in enumerate(sorted(status_counts.items())):
+            icon = _STATUS_ICONS.get(s, "❓")
+            m_cols[idx].metric(f"{icon} {s.capitalize()}", cnt)
+        st.divider()
+    else:
+        st.info("Noch keine abgeschlossenen Reparaturen vorhanden.")
 
-    st.caption(f"{len(filtered)} Einträge angezeigt (gesamt: {len(repairs)})")
+    # ── Filter ───────────────────────────────────────────────────────────────
+    all_statuses = sorted({a.get("status", "unknown") for a in actions})
+    all_severities = sorted({a.get("finding_severity", "") for a in actions if a.get("finding_severity")})
 
-    status_icons = {
-        "applied": "✅",
-        "proposed": "📋",
-        "validated": "🔬",
-        "approved": "👍",
-        "rejected": "❌",
-        "rolled_back": "↩️",
-        "failed": "💥",
-        "simulated": "🧪",
-    }
+    f_col1, f_col2 = st.columns(2)
+    with f_col1:
+        sel_status = st.multiselect("Status", all_statuses, default=all_statuses, key="hist_status")
+    with f_col2:
+        sel_sev = st.multiselect("Schweregrad des Findings", all_severities, default=all_severities, key="hist_sev") if all_severities else []
 
-    for repair in filtered:
-        status = repair.get("status", "unknown")
-        icon = status_icons.get(status, "❓")
-        title = repair.get("title", "Unbekannt")
-        risk = repair.get("risk_level", "-")
-        created = repair.get("created_at", "-")
+    filtered_actions = [
+        a for a in actions
+        if a.get("status") in sel_status
+        and (not sel_sev or a.get("finding_severity", "") in sel_sev)
+    ]
 
-        with st.expander(f"{icon} **{title}** — `{status}` | Risiko: {risk}"):
-            col1, col2 = st.columns(2)
-            with col1:
+    st.caption(f"{len(filtered_actions)} Einträge angezeigt (gesamt: {len(actions)})")
+
+    # ── Aktions-Liste ─────────────────────────────────────────────────────────
+    for action in filtered_actions:
+        status_val = action.get("status", "unknown")
+        sev = action.get("finding_severity", "")
+        title = action.get("title", "Unbekannt")
+        status_icon = _STATUS_ICONS.get(status_val, "❓")
+        sev_icon = _severity_color(sev) if sev else ""
+        created = action.get("created_at", "-")[:19].replace("T", " ")
+        updated = action.get("updated_at", "-")[:19].replace("T", " ")
+
+        with st.expander(f"{status_icon} **{title}** — `{status_val}` | {sev_icon} {sev.upper() if sev else ''}  |  {created}"):
+            c1, c2 = st.columns(2)
+            with c1:
+                st.write(f"**Status:** {status_icon} `{status_val}`")
                 st.write(f"**Erstellt:** {created}")
-                st.write(f"**Risiko:** {risk}")
-            with col2:
-                st.write(f"**Beschreibung:** {repair.get('description', '-')}")
-                st.write(f"**Git-Hash:** `{repair.get('git_commit_hash', '-')}`")
+                st.write(f"**Zuletzt geändert:** {updated}")
+                st.write(f"**Betroffene Datei:** `{action.get('finding_file', '-')}`")
+                if action.get("finding_line"):
+                    st.write(f"**Zeile:** {action['finding_line']}")
+                st.write(f"**Reparaturen vorgeschlagen:** {action.get('repairs_proposed', 0)}")
+                st.write(f"**Reparaturen angewendet:** {action.get('repairs_applied', 0)}")
+                if action.get("duration_seconds") is not None:
+                    st.write(f"**Dauer:** {action['duration_seconds']:.1f}s")
+            with c2:
+                st.write(f"**Beschreibung:** {action.get('description', '-')}")
+                if action.get("remediation_hint"):
+                    st.write(f"**Empfohlene Massnahme:** {action['remediation_hint']}")
+                if action.get("cve_ids"):
+                    st.write(f"**CVEs:** {', '.join(action['cve_ids'])}")
+                if action.get("approval_decision") is not None:
+                    decision_txt = "✅ Genehmigt" if action["approval_decision"] else "❌ Abgelehnt"
+                    st.write(f"**Entscheidung:** {decision_txt}")
+                if action.get("approval_reason"):
+                    st.write(f"**Begründung:** {action['approval_reason']}")
+                if action.get("approved_at"):
+                    st.write(f"**Entschieden am:** {action['approved_at'][:19].replace('T', ' ')}")
 
-            if repair.get("validation_result"):
-                st.json(repair["validation_result"])
+            errs = action.get("errors", [])
+            if errs:
+                st.error(f"Fehler: {'; '.join(errs)}")
+
+            if action.get("audit_trail"):
+                with st.expander(f"Audit-Trail ({len(action['audit_trail'])} Einträge)"):
+                    for entry in action["audit_trail"]:
+                        st.code(str(entry))
+
+            # Rollback-Option für angewendete Reparaturen
+            if status_val == "applied" and action.get("git_commit_hash"):
+                st.markdown("---")
+                if st.button(f"↩️ Rollback zu diesem Commit", key=f"hist_rb_{action.get('id', '')}"):
+                    res = post_json("/api/v1/repair/rollback", {
+                        "ha_config_path": action.get("ha_config_path", "/config"),
+                        "commit_hash": action["git_commit_hash"],
+                    })
+                    if res and res.get("success"):
+                        st.success("Rollback erfolgreich")
+                        st.cache_data.clear()
+                    else:
+                        st.error("Rollback fehlgeschlagen")
+
+    # ── Git-History (sekundär) ────────────────────────────────────────────────
+    if git_commits:
+        st.divider()
+        with st.expander(f"Git-Commit-History ({len(git_commits)} Commits)"):
+            for commit in git_commits:
+                st.markdown(f"**`{commit.get('short_hash', '')}`** — {commit.get('message', '')} *(by {commit.get('author', '')} am {commit.get('timestamp', '')[:10]})*")
+                if commit.get("files_changed"):
+                    st.caption(f"Geänderte Dateien: {', '.join(commit['files_changed'][:5])}")
+
+    # ── Backup-Tags ───────────────────────────────────────────────────────────
+    if backup_tags:
+        st.divider()
+        with st.expander(f"Backup-Tags ({len(backup_tags)})"):
+            for tag in backup_tags:
+                col_t, col_rb = st.columns([3, 1])
+                col_t.write(f"🏷️ `{tag.get('name')}` — Commit `{tag.get('commit')}` am {tag.get('timestamp', '')[:10]}")
+                if col_rb.button("↩️ Rollback", key=f"tag_rb_{tag.get('name')}"):
+                    res = post_json("/api/v1/repair/rollback", {
+                        "ha_config_path": "/config",
+                        "tag_name": tag.get("name"),
+                    })
+                    if res and res.get("success"):
+                        st.success(f"Rollback zu Tag `{tag.get('name')}` erfolgreich")
+                    else:
+                        st.error("Rollback fehlgeschlagen")
 
 
 # ---------------------------------------------------------------------------
