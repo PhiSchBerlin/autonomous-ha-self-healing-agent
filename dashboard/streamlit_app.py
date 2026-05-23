@@ -83,6 +83,42 @@ def fetch_text(path: str) -> str | None:
         return None
 
 
+def _poll_repair_job(job_id: str) -> dict[str, Any] | None:
+    """Pollt den Status eines Background-Repair-Jobs (ohne Cache)."""
+    try:
+        resp = httpx.get(f"{API_URL}/api/v1/repair/jobs/{job_id}", timeout=5.0)
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[return-value]
+    except Exception:
+        return None
+
+
+def _render_repair_job_status(job_id: str, total: int) -> None:
+    """Zeigt Polling-UI für einen laufenden Repair-Job."""
+    placeholder = st.empty()
+    for _ in range(120):  # max 4 Minuten (120 × 2s)
+        job = _poll_repair_job(job_id)
+        if job is None:
+            placeholder.error("Job-Status nicht abrufbar")
+            break
+        completed = job.get("completed", 0)
+        status_txt = job.get("status", "running")
+        with placeholder.container():
+            st.progress(completed / max(total, 1), text=f"Repair-Fortschritt: {completed}/{total} Issues verarbeitet")
+            if status_txt == "done":
+                successful = job.get("successful", 0)
+                st.success(f"Reparatur abgeschlossen: {successful}/{total} erfolgreich")
+                for r in job.get("results", []):
+                    if r.get("success"):
+                        st.info(f"✅ {r.get('issue_title', '')} — {r.get('repairs_proposed', 0)} Reparatur(en) vorgeschlagen")
+                    else:
+                        errs = "; ".join(r.get("errors", []) or [])
+                        st.warning(f"⚠️ {r.get('issue_title', '')} — {errs or 'Kein Patch generierbar'}")
+                st.cache_data.clear()
+                break
+        time.sleep(2)
+
+
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
@@ -323,22 +359,15 @@ def page_findings() -> None:
         if st.button(f"🔧 {n_sel} ausgewählte Issues reparieren lassen", type="primary"):
             selected_keys = st.session_state["selected_issue_ids"]
             issues_to_repair = [i for i in filtered if _issue_key(i) in selected_keys]
-            with st.spinner(f"Starte Reparatur für {len(issues_to_repair)} Issues..."):
-                result = post_json("/api/v1/repair/issues", {
-                    "issues": issues_to_repair,
-                    "ha_config_path": "/config",
-                })
-            if result:
-                ok = result.get("successful", 0)
-                total = result.get("total", 0)
-                st.success(f"Reparatur gestartet: {ok}/{total} erfolgreich angestossen")
-                for r in result.get("results", []):
-                    if r.get("success"):
-                        st.info(f"✅ {r.get('issue_title', '')} — {r.get('repairs_proposed', 0)} Reparatur(en) vorgeschlagen")
-                    else:
-                        errs = "; ".join(r.get("errors", []))
-                        st.warning(f"⚠️ {r.get('issue_title', '')} — {errs or 'Kein LLM erreichbar, statischer Scan läuft'}")
-                st.cache_data.clear()
+            result = post_json("/api/v1/repair/issues", {
+                "issues": issues_to_repair,
+                "ha_config_path": "/config",
+            }, timeout=10.0)
+            if result and result.get("job_id"):
+                st.info(f"Repair-Job gestartet (ID: {result['job_id'][:8]}…) — {len(issues_to_repair)} Issues werden verarbeitet")
+                _render_repair_job_status(result["job_id"], result.get("total", len(issues_to_repair)))
+            elif result:
+                st.warning("Job gestartet, aber keine Job-ID erhalten")
             else:
                 st.error("Repair-Endpunkt nicht erreichbar")
 
@@ -351,7 +380,7 @@ def page_findings() -> None:
 
         col_chk, col_exp = st.columns([0.05, 0.95])
         is_checked = ikey in st.session_state["selected_issue_ids"]
-        new_val = col_chk.checkbox("", value=is_checked, key=f"chk_{ikey}", label_visibility="collapsed")
+        new_val = col_chk.checkbox("Auswählen", value=is_checked, key=f"chk_{ikey}", label_visibility="collapsed")
         if new_val != is_checked:
             if new_val:
                 st.session_state["selected_issue_ids"].add(ikey)
@@ -470,23 +499,18 @@ def page_approvals() -> None:
                 if st.button(f"🔧 {n_ap_sel} Issues reparieren lassen", type="primary", key="ap_repair_btn"):
                     selected_keys = st.session_state["ap_selected_ids"]
                     issues_to_repair = [i for i in filtered_sec if _ikey(i) in selected_keys]
-                    with st.spinner(f"Starte Repair-Workflow für {len(issues_to_repair)} Issues..."):
-                        result = post_json("/api/v1/repair/issues", {
-                            "issues": issues_to_repair,
-                            "ha_config_path": "/config",
-                        })
-                    if result:
-                        ok = result.get("successful", 0)
-                        total = result.get("total", 0)
-                        st.success(f"Repair-Workflows gestartet: {ok}/{total} angestossen")
-                        for r in result.get("results", []):
-                            if r.get("success"):
-                                st.info(f"✅ {r.get('issue_title', '')} — {r.get('repairs_proposed', 0)} Reparatur(en) vorgeschlagen")
-                            else:
-                                errs = "; ".join(r.get("errors", []))
-                                st.warning(f"⚠️ {r.get('issue_title', '')} — {errs or 'Kein LLM erreichbar'}")
+                    result = post_json("/api/v1/repair/issues", {
+                        "issues": issues_to_repair,
+                        "ha_config_path": "/config",
+                    }, timeout=10.0)
+                    if result and result.get("job_id"):
+                        st.info(f"Repair-Job gestartet (ID: {result['job_id'][:8]}…) — {len(issues_to_repair)} Issues werden verarbeitet")
                         st.session_state["ap_selected_ids"] = set()
-                        st.cache_data.clear()
+                        _render_repair_job_status(result["job_id"], result.get("total", len(issues_to_repair)))
+                    elif result:
+                        st.warning("Job gestartet, aber keine Job-ID erhalten")
+                    else:
+                        st.error("Repair-Endpunkt nicht erreichbar")
 
             for issue in filtered_sec:
                 sev = issue.get("severity", "info")
@@ -496,7 +520,7 @@ def page_approvals() -> None:
 
                 chk_col, exp_col = st.columns([0.05, 0.95])
                 is_checked = ikey in st.session_state.get("ap_selected_ids", set())
-                new_val = chk_col.checkbox("", value=is_checked, key=f"ap_chk_{ikey}", label_visibility="collapsed")
+                new_val = chk_col.checkbox("Auswählen", value=is_checked, key=f"ap_chk_{ikey}", label_visibility="collapsed")
                 if new_val != is_checked:
                     if new_val:
                         st.session_state["ap_selected_ids"].add(ikey)

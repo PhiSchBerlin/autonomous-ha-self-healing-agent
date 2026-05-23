@@ -24,8 +24,8 @@ RUN pip install --no-cache-dir \
     "streamlit>=1.40.0" \
     "chromadb>=0.5.0"
 
-ARG BUILD_VERSION=1.0.0
-ARG CACHE_BUST=20260520-11
+ARG BUILD_VERSION=1.4.4
+ARG CACHE_BUST=20260523-2
 RUN echo "Cloning version ${BUILD_VERSION} (bust: ${CACHE_BUST})" && git clone --depth 1 --branch main \
     https://github.com/PhiSchBerlin/autonomous-ha-self-healing-agent.git /src \
     && cp -r /src/agent_core     ./agent_core \
@@ -42,15 +42,18 @@ RUN echo "Cloning version ${BUILD_VERSION} (bust: ${CACHE_BUST})" && git clone -
 
 RUN mkdir -p /data/chromadb /data/backups /data/logs
 
-# ChromaDB ONNX-Embedding-Modell beim Build herunterladen (79 MB),
-# damit der erste /knowledge/search-Aufruf nicht timeoutet.
-RUN python - <<'EOF'
+# ONNX-Embedding-Modell beim Build cachen (79 MB) → kein Download beim ersten Start
+ENV CHROMA_CACHE_DIR=/data/chroma_cache
+RUN mkdir -p /data/chroma_cache && python - <<'EOF'
+import os
+os.environ["CHROMA_CACHE_DIR"] = "/data/chroma_cache"
 import chromadb
 client = chromadb.PersistentClient(path="/data/chromadb")
-col = client.get_or_create_collection("warmup")
-col.add(documents=["warmup"], ids=["warmup-0"])
-client.delete_collection("warmup")
-print("ChromaDB ONNX model pre-downloaded.")
+col = client.get_or_create_collection("warmup", embedding_function=None)
+from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
+ef = ONNXMiniLM_L6_V2(preferred_providers=["CPUExecutionProvider"])
+ef(["warmup"])
+print("ONNX model pre-cached to /data/chroma_cache")
 EOF
 
 COPY run.sh /run.sh

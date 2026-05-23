@@ -1,5 +1,6 @@
 """API-Router für Repair-Workflows, Approvals und GitOps."""
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -8,6 +9,9 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/repair", tags=["repair"])
+
+# In-Memory Job-Registry für Background-Repair-Jobs
+_repair_jobs: dict[str, dict[str, Any]] = {}
 
 
 class RepairRequest(BaseModel):
@@ -124,23 +128,19 @@ async def run_repair(request: RepairRequest) -> dict[str, Any]:
     }
 
 
-@router.post("/issues", status_code=status.HTTP_202_ACCEPTED)
-async def repair_issues(request: RepairIssuesRequest) -> dict[str, Any]:
-    """Startet den Repair-Workflow für eine Liste von Security-Issues sequenziell."""
+async def _run_repair_job(job_id: str, issues: list[dict[str, Any]], ha_config_path: str) -> None:
+    """Hintergrund-Task: repariert Issues sequenziell und aktualisiert den Job-Status."""
     from agent_core.repair_store import add_action
 
-    if not request.issues:
-        return {"total": 0, "results": []}
-
+    job = _repair_jobs[job_id]
     orchestrator = _build_llm_and_orchestrator()
-    results = []
 
-    for issue in request.issues:
+    for idx, issue in enumerate(issues):
         finding = _security_issue_to_finding(issue)
         try:
             result = await orchestrator.run_repair(
                 finding=finding,
-                ha_config_path=request.ha_config_path,
+                ha_config_path=ha_config_path,
             )
             action_id = add_action({
                 "id": str(result.run_id),
@@ -158,9 +158,9 @@ async def repair_issues(request: RepairIssuesRequest) -> dict[str, Any]:
                 "duration_seconds": result.duration_seconds,
                 "errors": result.errors,
                 "audit_trail": [str(uid) for uid in result.audit_trail],
-                "ha_config_path": request.ha_config_path,
+                "ha_config_path": ha_config_path,
             })
-            results.append({
+            job["results"].append({
                 "issue_id": issue.get("id", ""),
                 "issue_title": issue.get("title", ""),
                 "action_id": action_id,
@@ -179,21 +179,61 @@ async def repair_issues(request: RepairIssuesRequest) -> dict[str, Any]:
                 "finding_file": issue.get("file_path", ""),
                 "status": "failed",
                 "errors": [str(exc)],
-                "ha_config_path": request.ha_config_path,
+                "ha_config_path": ha_config_path,
             })
-            results.append({
+            job["results"].append({
                 "issue_id": issue.get("id", ""),
                 "issue_title": issue.get("title", ""),
                 "action_id": failed_id,
                 "success": False,
                 "errors": [str(exc)],
             })
+        job["completed"] = idx + 1
+
+    job["status"] = "done"
+    job["finished_at"] = datetime.now(UTC).isoformat()
+
+
+@router.post("/issues", status_code=status.HTTP_202_ACCEPTED)
+async def repair_issues(request: RepairIssuesRequest) -> dict[str, Any]:
+    """Startet den Repair-Workflow für eine Liste von Security-Issues als Hintergrund-Job.
+
+    Gibt sofort eine job_id zurück. Status über GET /repair/jobs/{job_id} abrufen.
+    """
+    if not request.issues:
+        return {"total": 0, "job_id": None, "status": "done", "results": []}
+
+    job_id = str(uuid4())
+    _repair_jobs[job_id] = {
+        "job_id": job_id,
+        "status": "running",
+        "total": len(request.issues),
+        "completed": 0,
+        "results": [],
+        "started_at": datetime.now(UTC).isoformat(),
+        "finished_at": None,
+    }
+
+    asyncio.create_task(_run_repair_job(job_id, request.issues, request.ha_config_path))
 
     return {
+        "job_id": job_id,
         "total": len(request.issues),
-        "successful": sum(1 for r in results if r.get("success")),
-        "results": results,
+        "status": "running",
     }
+
+
+@router.get("/jobs/{job_id}")
+async def get_repair_job(job_id: str) -> dict[str, Any]:
+    """Gibt den aktuellen Status eines Repair-Jobs zurück."""
+    job = _repair_jobs.get(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job {job_id} nicht gefunden",
+        )
+    successful = sum(1 for r in job["results"] if r.get("success"))
+    return {**job, "successful": successful}
 
 
 @router.get("/pending")

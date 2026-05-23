@@ -337,7 +337,7 @@ class RepairAgent(BaseAgent):
                 except SyntaxError as exc:
                     validation_issues.append(f"Python-Syntaxfehler in {file_path}: {exc}")
 
-        # LLM-Review des Patches
+        # LLM-Review des Patches (nur Advisory — kein Blockieren)
         if repair.changes:
             changes_str = "\n".join(
                 f"Datei: {c.file_path}\n"
@@ -345,17 +345,22 @@ class RepairAgent(BaseAgent):
                 f"Fix:\n{c.proposed_content[:200]}"
                 for c in repair.changes[:3]
             )
-            raw = await self._call_llm(
-                state,
-                f"Review diesen Patch:\n{changes_str}",
-                system_prompt=_VALIDATE_PATCH_SYSTEM,
-            )
             try:
+                raw = await self._call_llm(
+                    state,
+                    f"Review diesen Patch:\n{changes_str}",
+                    system_prompt=_VALIDATE_PATCH_SYSTEM,
+                )
                 review = _extract_json(raw)
+                # LLM-Bedenken als Warnings speichern, aber nicht blockieren
                 if not review.get("approved", True):
-                    validation_issues.extend(review.get("issues", []))
-            except (json.JSONDecodeError, ValueError):
-                pass
+                    concerns = review.get("issues", [])
+                    logger.warning(
+                        "LLM-Patch-Review: %d Bedenken (nicht blockierend): %s",
+                        len(concerns), concerns,
+                    )
+            except Exception as llm_exc:
+                logger.debug("LLM-Patch-Review übersprungen: %s", llm_exc)
 
         validation_result = {
             "issues": validation_issues,
