@@ -386,6 +386,7 @@ def page_findings() -> None:
                 st.session_state["selected_issue_ids"].add(ikey)
             else:
                 st.session_state["selected_issue_ids"].discard(ikey)
+            st.rerun()
 
         with col_exp:
             with st.expander(f"{icon} [{sev.upper()}] {title}"):
@@ -526,6 +527,7 @@ def page_approvals() -> None:
                         st.session_state["ap_selected_ids"].add(ikey)
                     else:
                         st.session_state["ap_selected_ids"].discard(ikey)
+                    st.rerun()
 
                 with exp_col:
                     with st.expander(f"{icon} [{sev.upper()}] {title}"):
