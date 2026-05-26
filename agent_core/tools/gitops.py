@@ -263,6 +263,6 @@ class GitOpsEngine:
                 lines.append(f"Fixes finding: {finding_title}")
             if repair_action_id:
                 lines.append(f"Repair-Action-ID: {repair_action_id}")
-            lines.append(f"Applied-by: HA Self-Healing Agent")
+            lines.append("Applied-by: HA Self-Healing Agent")
             lines.append(f"Timestamp: {datetime.now(UTC).isoformat()}")
         return "\n".join(lines)

@@ -79,7 +79,7 @@ async def python_syntax_check(file_path: str) -> dict[str, Any]:
     if not path.exists():
         return {"success": False, "error": f"Datei nicht gefunden: {file_path}", "issues": []}
 
-    source = path.read_text(encoding="utf-8", errors="replace")
+    source = await asyncio.to_thread(path.read_text, encoding="utf-8", errors="replace")
     try:
         ast.parse(source, filename=file_path)
         return {"success": True, "issues": [], "issue_count": 0}
