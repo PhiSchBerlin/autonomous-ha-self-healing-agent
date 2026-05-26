@@ -65,7 +65,7 @@ def set_latest_issues(issues: list["SecurityIssue"]) -> None:
     _save_to_disk(_latest_issues)
 
 
-async def get_latest_issues() -> list["SecurityIssue"]:
+def get_latest_issues() -> list["SecurityIssue"]:
     return list(_latest_issues)
 
 

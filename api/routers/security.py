@@ -102,7 +102,7 @@ async def get_security_issues(
     """
     try:
         from security.store import get_latest_issues
-        issues = await get_latest_issues()
+        issues = get_latest_issues()
     except Exception:
         issues = []
 
@@ -134,7 +134,7 @@ async def get_security_issues_summary() -> dict[str, Any]:
     """Gibt eine Zusammenfassung der Issues nach Schweregrad zurück."""
     from security.store import get_latest_issues
     try:
-        issues = await get_latest_issues()
+        issues = get_latest_issues()
     except Exception:
         issues = []
 
