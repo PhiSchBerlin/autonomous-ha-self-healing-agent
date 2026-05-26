@@ -95,3 +95,8 @@ Thumbs.db
 .AppleDouble
 .LSOverride
 ._*
+
+# ------------------------------------------------------------------
+# Projektinterne Dokumente
+# ------------------------------------------------------------------
+PROJECT-DESCRIPTION.md
