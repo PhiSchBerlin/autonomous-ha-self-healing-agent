@@ -745,8 +745,32 @@ def page_repair_history() -> None:
                     for alt in alternatives:
                         st.markdown(f"- {alt}")
 
-            # LLM-Validierungsergebnis
+            # Sandbox-Validierungsergebnis
             val = action.get("validation_result") or {}
+            sandbox_report = val.get("sandbox_report") or {}
+            if sandbox_report:
+                sb_passed = sandbox_report.get("passed", True)
+                sb_issues = sandbox_report.get("issues", [])
+                sb_icon = "✅" if sb_passed else "❌"
+                with st.expander(f"{sb_icon} Sandbox-Validierung — {'bestanden' if sb_passed else f'{len(sb_issues)} Problem(e)'}"):
+                    if sb_issues:
+                        for issue in sb_issues:
+                            st.warning(issue)
+                    else:
+                        st.success("YAML-Lint, Python-Syntax, Jinja2-Templates: alles in Ordnung")
+                    llm_sanity_verdict = sandbox_report.get("llm_verdict")
+                    if llm_sanity_verdict:
+                        conf = sandbox_report.get("llm_confidence", 0.0)
+                        st.write(f"**LLM-Sanity-Check:** {llm_sanity_verdict} (Confidence: {conf:.0%})")
+
+            # Dry-Run-Hinweis
+            app_result = action.get("application_result") or {}
+            if app_result.get("dry_run"):
+                st.info(f"Simulation (dry_run): Änderungen wurden NICHT geschrieben. Betroffene Dateien: {', '.join(app_result.get('would_apply', []))}")
+            elif app_result.get("blocked"):
+                st.warning(f"Blockiert durch Security-Policy: {app_result.get('message', '')}")
+
+            # LLM-Patch-Review
             llm_review = val.get("llm_review") or {}
             if llm_review:
                 with st.expander("🔍 LLM-Patch-Review"):

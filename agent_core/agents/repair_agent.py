@@ -319,32 +319,47 @@ class RepairAgent(BaseAgent):
         return {"repair_actions": updated_repairs}
 
     async def _node_validate(self, state: AgentState) -> dict[str, Any]:
-        """Validiert den Patch: YAML-Lint + LLM-Review."""
+        """Validiert den Patch via ValidationAgent (Sandbox) + LLM-Review."""
         repair = self._get_current_repair(state)
         if not repair:
             return {}
 
-        validation_issues: list[str] = []
-
-        for change in repair.changes:
-            content = change.proposed_content
-            file_path = change.file_path
-
-            # YAML-Validierung via Temp-Datei-Simulation
-            if file_path.endswith((".yaml", ".yml")):
-                try:
-                    import yaml
-                    yaml.safe_load(content)
-                except Exception as exc:
-                    validation_issues.append(f"YAML-Fehler in {file_path}: {exc}")
-
-            # Python-Syntax
-            if file_path.endswith(".py"):
-                import ast
-                try:
-                    ast.parse(content)
-                except SyntaxError as exc:
-                    validation_issues.append(f"Python-Syntaxfehler in {file_path}: {exc}")
+        # Vollständige Sandbox-Validierung via ValidationAgent
+        sandbox_report: dict[str, Any] = {}
+        sandbox_issues: list[str] = []
+        try:
+            from agent_core.agents.validation_agent import ValidationAgent
+            val_agent = ValidationAgent(self.llm, self.config)
+            val_result = await val_agent.run(
+                context={"repair_action": repair.model_dump(mode="json")}
+            )
+            # ValidationAgent speichert Bericht in context — aus finalem State extrahieren
+            # WorkflowResult enthält keinen direkten context-Zugriff,
+            # daher holen wir die Daten aus dem LangGraph-State via Checkpoint
+            graph = val_agent.get_graph()
+            thread_id = str(val_result.run_id)
+            snapshot = graph.get_state({"configurable": {"thread_id": thread_id}})
+            if snapshot and snapshot.values:
+                raw_state = snapshot.values
+                ctx = raw_state.get("context", {}) if isinstance(raw_state, dict) else getattr(raw_state, "context", {})
+                sandbox_report = ctx.get("validation_report", {})
+                sandbox_issues = sandbox_report.get("issues", [])
+        except Exception as exc:
+            logger.warning("ValidationAgent fehlgeschlagen (Fallback auf Inline): %s", exc)
+            # Fallback: einfache Inline-YAML/Python-Prüfung
+            for change in repair.changes:
+                if change.file_path.endswith((".yaml", ".yml")):
+                    try:
+                        import yaml
+                        yaml.safe_load(change.proposed_content)
+                    except Exception as yaml_exc:
+                        sandbox_issues.append(f"YAML-Fehler in {change.file_path}: {yaml_exc}")
+                if change.file_path.endswith(".py"):
+                    import ast
+                    try:
+                        ast.parse(change.proposed_content)
+                    except SyntaxError as syn_exc:
+                        sandbox_issues.append(f"Python-Syntaxfehler in {change.file_path}: {syn_exc}")
 
         # LLM-Review des Patches — Ergebnis vollständig speichern
         llm_review: dict[str, Any] = {}
@@ -362,10 +377,8 @@ class RepairAgent(BaseAgent):
                     system_prompt=_VALIDATE_PATCH_SYSTEM,
                 )
                 llm_review = _extract_json(raw)
-                # Confidence aus LLM-Review übernehmen
                 if "confidence" in llm_review:
                     repair.confidence = float(llm_review["confidence"])
-                # LLM-Bedenken als Warnings loggen, aber nicht blockieren
                 if not llm_review.get("approved", True):
                     concerns = llm_review.get("issues", [])
                     logger.warning(
@@ -375,9 +388,11 @@ class RepairAgent(BaseAgent):
             except Exception as llm_exc:
                 logger.debug("LLM-Patch-Review übersprungen: %s", llm_exc)
 
+        all_issues = sandbox_issues
         validation_result = {
-            "issues": validation_issues,
-            "passed": len(validation_issues) == 0,
+            "issues": all_issues,
+            "passed": len(all_issues) == 0,
+            "sandbox_report": sandbox_report,
             "llm_review": {
                 "approved": llm_review.get("approved"),
                 "confidence": llm_review.get("confidence"),
@@ -389,11 +404,12 @@ class RepairAgent(BaseAgent):
 
         if validation_result["passed"]:
             repair.status = RepairStatus.VALIDATED
-            logger.info("Patch validiert: '%s'", repair.title)
+            logger.info("Patch validiert (Sandbox + LLM): '%s'", repair.title)
         else:
             repair.status = RepairStatus.FAILED
             logger.warning(
-                "Patch-Validation fehlgeschlagen: %d Issues", len(validation_issues)
+                "Patch-Validation fehlgeschlagen: %d Issues: %s",
+                len(all_issues), all_issues,
             )
 
         repair.touch()
@@ -469,9 +485,48 @@ class RepairAgent(BaseAgent):
 
     async def _node_apply(self, state: AgentState) -> dict[str, Any]:
         """Wendet die validierten Änderungen auf das Dateisystem an."""
+        from config.settings import get_settings
+
         repair = self._get_current_repair(state)
         if not repair or state.context.get("ha_config_path") is None:
             return {}
+
+        # Sandbox-Durchsetzung: dry_run und Security-Setting prüfen
+        settings = get_settings()
+        if self.config.dry_run:
+            logger.info(
+                "dry_run=True: Änderungen für '%s' NICHT auf Disk geschrieben (Simulation)",
+                repair.title,
+            )
+            repair.status = RepairStatus.SIMULATED
+            repair.application_result = {
+                "success": False,
+                "dry_run": True,
+                "message": "Änderungen wurden simuliert aber nicht angewendet (dry_run=True)",
+                "would_apply": [c.file_path for c in repair.changes],
+            }
+            repair.touch()
+            updated = [repair if r.id == repair.id else r for r in state.repair_actions]
+            return {"repair_actions": updated}
+
+        if not settings.security.allow_autonomous_file_writes:
+            logger.warning(
+                "allow_autonomous_file_writes=False: Schreiben für '%s' blockiert",
+                repair.title,
+            )
+            repair.status = RepairStatus.FAILED
+            repair.application_result = {
+                "success": False,
+                "blocked": True,
+                "message": "Dateizugriff blockiert durch SecuritySettings.allow_autonomous_file_writes=False",
+            }
+            repair.touch()
+            self._add_audit_record(
+                state, "apply_blocked_by_policy", str(repair.id), success=False,
+                error_message="allow_autonomous_file_writes=False",
+            )
+            updated = [repair if r.id == repair.id else r for r in state.repair_actions]
+            return {"repair_actions": updated}
 
         config_path = state.context.get("ha_config_path", "/config")
         applied_files: list[str] = []

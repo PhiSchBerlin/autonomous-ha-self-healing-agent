@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import logging
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -96,33 +95,25 @@ class ValidationAgent(BaseAgent):
 
     async def _node_prepare_sandbox(self, state: AgentState) -> dict[str, Any]:
         """Erstellt temporäre Sandbox-Dateien für alle vorgeschlagenen Änderungen."""
+        from sandbox import SandboxManager
+
         repair_data = state.context.get("repair_action")
         if not repair_data:
             return {"errors": [*state.errors, "Kein repair_action im Context"]}
 
         repair = RepairAction(**repair_data) if isinstance(repair_data, dict) else repair_data
 
-        tmpdir = tempfile.mkdtemp(prefix="ha_agent_validation_")
-        sandbox_files: dict[str, str] = {}
-
-        for change in repair.changes:
-            fp = change.file_path
-            proposed = change.proposed_content
-
-            # Dateiname ermitteln und in Sandbox schreiben
-            fname = Path(fp).name
-            sandbox_path = Path(tmpdir) / fname
-            sandbox_path.write_text(proposed, encoding="utf-8")
-            sandbox_files[fp] = str(sandbox_path)
+        sandbox = SandboxManager.from_repair_action(repair)
+        sandbox.__enter__()  # Lebensdauer über den gesamten Workflow — Cleanup in _node_generate_report
 
         logger.info(
-            "Sandbox erstellt: %d Dateien in %s", len(sandbox_files), tmpdir
+            "Sandbox erstellt: %d Dateien in %s", len(sandbox.files), sandbox.directory
         )
         return {
             "context": {
                 **state.context,
-                "sandbox_dir": tmpdir,
-                "sandbox_files": sandbox_files,
+                "sandbox_dir": sandbox.directory,
+                "sandbox_files": sandbox.files,
                 "repair_obj": repair.model_dump(mode="json"),
                 "validation_issues": [],
                 "validation_passed": False,
