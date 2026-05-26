@@ -75,6 +75,7 @@ class BaseAgent(ABC):
         else:
             final_state = AgentState(**raw_result)
 
+        from models.enums import RepairStatus
         return WorkflowResult(
             run_id=state.run_id,
             agent_type=self.agent_type,
@@ -82,7 +83,7 @@ class BaseAgent(ABC):
             findings_count=len(final_state.findings),
             security_issues_count=len(final_state.security_issues),
             repairs_applied_count=sum(
-                1 for r in final_state.repair_actions if r.status == "applied"
+                1 for r in final_state.repair_actions if r.status == RepairStatus.APPLIED
             ),
             repairs_proposed_count=len(final_state.repair_actions),
             duration_seconds=duration,
@@ -90,6 +91,7 @@ class BaseAgent(ABC):
             tool_calls=len(final_state.tool_calls),
             errors=final_state.errors,
             audit_trail=[r.id for r in final_state.audit_records],
+            repair_actions=final_state.repair_actions,
         )
 
     async def _call_llm(

@@ -72,3 +72,5 @@ class WorkflowResult(TimestampedModel):
     summary: str = ""
     errors: list[str] = Field(default_factory=list)
     audit_trail: list[UUID] = Field(default_factory=list)
+
+    repair_actions: list["RepairAction"] = Field(default_factory=list)

@@ -584,8 +584,19 @@ def page_approvals() -> None:
                 st.write(f"**Betroffene Datei:** `{action.get('finding_file', '-')}`")
                 if action.get("finding_line"):
                     st.write(f"**Zeile:** {action['finding_line']}")
+                confidence = action.get("confidence")
+                if confidence is not None:
+                    st.progress(confidence, text=f"Confidence: {confidence:.0%}")
+                risk = action.get("risk_level")
+                if risk:
+                    risk_icon = _RISK_ICONS.get(risk, "⚫")
+                    st.write(f"**Risiko:** {risk_icon} `{risk}`")
+                if action.get("estimated_impact"):
+                    st.write(f"**Erwartete Auswirkung:** {action['estimated_impact']}")
             with col_r:
                 st.write(f"**Beschreibung:** {action.get('description', '-')}")
+                if action.get("rationale"):
+                    st.write(f"**Begründung des Agents:** {action['rationale']}")
                 if action.get("remediation_hint"):
                     st.write(f"**Hinweis:** {action['remediation_hint']}")
                 if action.get("cve_ids"):
@@ -593,6 +604,20 @@ def page_approvals() -> None:
                 errs = action.get("errors", [])
                 if errs:
                     st.write(f"**Fehler:** {'; '.join(errs)}")
+
+            alternatives = action.get("alternatives", [])
+            if alternatives:
+                with st.expander("💡 Verworfene Alternativen"):
+                    for alt in alternatives:
+                        st.markdown(f"- {alt}")
+
+            changes = action.get("changes", [])
+            if changes:
+                with st.expander(f"📝 Codeänderungen ({len(changes)} Datei(en))"):
+                    for ch in changes:
+                        st.caption(f"`{ch.get('file_path', '')}` — {ch.get('change_type', 'modify')}")
+                        if ch.get("diff"):
+                            st.code(ch["diff"], language="diff")
 
             if action.get("audit_trail"):
                 st.caption(f"Audit-Trail: {len(action['audit_trail'])} Einträge")
@@ -674,7 +699,9 @@ def page_repair_history() -> None:
         created = action.get("created_at", "-")[:19].replace("T", " ")
         updated = action.get("updated_at", "-")[:19].replace("T", " ")
 
-        with st.expander(f"{status_icon} **{title}** — `{status_val}` | {sev_icon} {sev.upper() if sev else ''}  |  {created}"):
+        confidence = action.get("confidence")
+        conf_label = f"{confidence:.0%}" if confidence is not None else "—"
+        with st.expander(f"{status_icon} **{title}** — `{status_val}` | {sev_icon} {sev.upper() if sev else ''}  |  {created}  |  Confidence: {conf_label}"):
             c1, c2 = st.columns(2)
             with c1:
                 st.write(f"**Status:** {status_icon} `{status_val}`")
@@ -687,8 +714,18 @@ def page_repair_history() -> None:
                 st.write(f"**Reparaturen angewendet:** {action.get('repairs_applied', 0)}")
                 if action.get("duration_seconds") is not None:
                     st.write(f"**Dauer:** {action['duration_seconds']:.1f}s")
+                if confidence is not None:
+                    st.progress(confidence, text=f"Confidence: {conf_label}")
+                risk = action.get("risk_level")
+                if risk:
+                    risk_icon = _RISK_ICONS.get(risk, "⚫")
+                    st.write(f"**Risiko:** {risk_icon} `{risk}`")
+                if action.get("estimated_impact"):
+                    st.write(f"**Erwartete Auswirkung:** {action['estimated_impact']}")
             with c2:
                 st.write(f"**Beschreibung:** {action.get('description', '-')}")
+                if action.get("rationale"):
+                    st.write(f"**Begründung des Agents:** {action['rationale']}")
                 if action.get("remediation_hint"):
                     st.write(f"**Empfohlene Massnahme:** {action['remediation_hint']}")
                 if action.get("cve_ids"):
@@ -700,6 +737,39 @@ def page_repair_history() -> None:
                     st.write(f"**Begründung:** {action['approval_reason']}")
                 if action.get("approved_at"):
                     st.write(f"**Entschieden am:** {action['approved_at'][:19].replace('T', ' ')}")
+
+            # Alternativen
+            alternatives = action.get("alternatives", [])
+            if alternatives:
+                with st.expander("💡 Vom Agent verworfene Alternativen"):
+                    for alt in alternatives:
+                        st.markdown(f"- {alt}")
+
+            # LLM-Validierungsergebnis
+            val = action.get("validation_result") or {}
+            llm_review = val.get("llm_review") or {}
+            if llm_review:
+                with st.expander("🔍 LLM-Patch-Review"):
+                    approved = llm_review.get("approved")
+                    if approved is not None:
+                        st.write(f"**Bewertet:** {'✅ Gut' if approved else '⚠️ Bedenken'}")
+                    if llm_review.get("concerns"):
+                        st.write("**Bedenken:**")
+                        for concern in llm_review["concerns"]:
+                            st.markdown(f"- {concern}")
+                    if llm_review.get("suggestions"):
+                        st.write("**Verbesserungsvorschläge:**")
+                        for s in llm_review["suggestions"]:
+                            st.markdown(f"- {s}")
+
+            # Änderungs-Diffs
+            changes = action.get("changes", [])
+            if changes:
+                with st.expander(f"📝 Codeänderungen ({len(changes)} Datei(en))"):
+                    for ch in changes:
+                        st.caption(f"`{ch.get('file_path', '')}` — {ch.get('change_type', 'modify')}")
+                        if ch.get("diff"):
+                            st.code(ch["diff"], language="diff")
 
             errs = action.get("errors", [])
             if errs:

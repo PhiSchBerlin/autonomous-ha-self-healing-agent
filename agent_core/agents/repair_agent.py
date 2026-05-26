@@ -255,6 +255,7 @@ class RepairAgent(BaseAgent):
                 )
             )
 
+        finding_data = state.context.get("finding_obj", {})
         repair = RepairAction(
             finding_id=finding_id,
             title=patch_data.get("title", "Automatischer Patch"),
@@ -262,10 +263,18 @@ class RepairAgent(BaseAgent):
             rationale=patch_data.get("rationale", ""),
             status=RepairStatus.PROPOSED,
             changes=changes,
-            confidence=0.75,
+            confidence=0.5,  # Vorläufig — wird in _node_validate durch LLM-Review ersetzt
             risk_level=patch_data.get("risk_level", "medium"),
             estimated_impact=patch_data.get("estimated_impact"),
             alternatives=patch_data.get("alternatives", []),
+            metadata={
+                "finding_title": finding_data.get("title", ""),
+                "finding_severity": finding_data.get("severity", ""),
+                "finding_description": finding_data.get("description", ""),
+                "affected_files": finding_data.get("affected_files", []),
+                "suggested_fix": finding_data.get("suggested_fix", ""),
+                "llm_raw_patch": patch_data,
+            },
         )
 
         logger.info("Patch generiert: '%s' (%d Änderungen)", repair.title, len(changes))
@@ -337,7 +346,8 @@ class RepairAgent(BaseAgent):
                 except SyntaxError as exc:
                     validation_issues.append(f"Python-Syntaxfehler in {file_path}: {exc}")
 
-        # LLM-Review des Patches (nur Advisory — kein Blockieren)
+        # LLM-Review des Patches — Ergebnis vollständig speichern
+        llm_review: dict[str, Any] = {}
         if repair.changes:
             changes_str = "\n".join(
                 f"Datei: {c.file_path}\n"
@@ -351,10 +361,13 @@ class RepairAgent(BaseAgent):
                     f"Review diesen Patch:\n{changes_str}",
                     system_prompt=_VALIDATE_PATCH_SYSTEM,
                 )
-                review = _extract_json(raw)
-                # LLM-Bedenken als Warnings speichern, aber nicht blockieren
-                if not review.get("approved", True):
-                    concerns = review.get("issues", [])
+                llm_review = _extract_json(raw)
+                # Confidence aus LLM-Review übernehmen
+                if "confidence" in llm_review:
+                    repair.confidence = float(llm_review["confidence"])
+                # LLM-Bedenken als Warnings loggen, aber nicht blockieren
+                if not llm_review.get("approved", True):
+                    concerns = llm_review.get("issues", [])
                     logger.warning(
                         "LLM-Patch-Review: %d Bedenken (nicht blockierend): %s",
                         len(concerns), concerns,
@@ -365,6 +378,12 @@ class RepairAgent(BaseAgent):
         validation_result = {
             "issues": validation_issues,
             "passed": len(validation_issues) == 0,
+            "llm_review": {
+                "approved": llm_review.get("approved"),
+                "confidence": llm_review.get("confidence"),
+                "concerns": llm_review.get("issues", []),
+                "suggestions": llm_review.get("suggestions", []),
+            },
         }
         repair.validation_result = validation_result
 

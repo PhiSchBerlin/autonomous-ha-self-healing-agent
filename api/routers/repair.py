@@ -100,15 +100,32 @@ async def run_repair(request: RepairRequest) -> dict[str, Any]:
         ha_config_path=request.ha_config_path,
     )
 
+    repair_action = result.repair_actions[0] if result.repair_actions else None
     action_id = add_action({
         "id": str(result.run_id),
-        "title": request.finding.get("title", "Unbekannte Reparatur"),
-        "description": request.finding.get("description", ""),
+        "title": repair_action.title if repair_action else request.finding.get("title", "Unbekannte Reparatur"),
+        "description": repair_action.description if repair_action else request.finding.get("description", ""),
+        "rationale": repair_action.rationale if repair_action else "",
         "finding_id": request.finding.get("id", ""),
         "finding_severity": request.finding.get("severity", ""),
         "finding_file": request.finding.get("file_path", ""),
         "finding_line": request.finding.get("line_number"),
-        "status": "proposed" if result.repairs_proposed_count > 0 else "failed",
+        "status": repair_action.status.value if repair_action else ("proposed" if result.repairs_proposed_count > 0 else "failed"),
+        "confidence": repair_action.confidence if repair_action else None,
+        "risk_level": repair_action.risk_level if repair_action else "unknown",
+        "estimated_impact": repair_action.estimated_impact if repair_action else None,
+        "alternatives": repair_action.alternatives if repair_action else [],
+        "validation_result": repair_action.validation_result if repair_action else None,
+        "simulation_result": repair_action.simulation_result if repair_action else None,
+        "changes": [
+            {
+                "file_path": c.file_path,
+                "change_type": c.change_type,
+                "diff": c.diff,
+            }
+            for c in (repair_action.changes if repair_action else [])
+        ],
+        "context": repair_action.metadata if repair_action else {},
         "repairs_proposed": result.repairs_proposed_count,
         "repairs_applied": result.repairs_applied_count,
         "duration_seconds": result.duration_seconds,
@@ -142,17 +159,34 @@ async def _run_repair_job(job_id: str, issues: list[dict[str, Any]], ha_config_p
                 finding=finding,
                 ha_config_path=ha_config_path,
             )
+            repair_action = result.repair_actions[0] if result.repair_actions else None
             action_id = add_action({
                 "id": str(result.run_id),
-                "title": issue.get("title", "Unbekannte Reparatur"),
-                "description": issue.get("description", ""),
+                "title": repair_action.title if repair_action else issue.get("title", "Unbekannte Reparatur"),
+                "description": repair_action.description if repair_action else issue.get("description", ""),
+                "rationale": repair_action.rationale if repair_action else "",
                 "finding_id": issue.get("id", ""),
                 "finding_severity": issue.get("severity", ""),
                 "finding_file": issue.get("file_path", ""),
                 "finding_line": issue.get("line_number"),
                 "remediation_hint": issue.get("remediation", ""),
                 "cve_ids": issue.get("cve_ids", []),
-                "status": "proposed" if result.repairs_proposed_count > 0 else "failed",
+                "status": repair_action.status.value if repair_action else ("proposed" if result.repairs_proposed_count > 0 else "failed"),
+                "confidence": repair_action.confidence if repair_action else None,
+                "risk_level": repair_action.risk_level if repair_action else "unknown",
+                "estimated_impact": repair_action.estimated_impact if repair_action else None,
+                "alternatives": repair_action.alternatives if repair_action else [],
+                "validation_result": repair_action.validation_result if repair_action else None,
+                "simulation_result": repair_action.simulation_result if repair_action else None,
+                "changes": [
+                    {
+                        "file_path": c.file_path,
+                        "change_type": c.change_type,
+                        "diff": c.diff,
+                    }
+                    for c in (repair_action.changes if repair_action else [])
+                ],
+                "context": repair_action.metadata if repair_action else {},
                 "repairs_proposed": result.repairs_proposed_count,
                 "repairs_applied": result.repairs_applied_count,
                 "duration_seconds": result.duration_seconds,
