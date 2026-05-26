@@ -16,8 +16,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
 from .coordinator import AgentCoordinatorData, HAAgentCoordinator
+
+type HASelHealingConfigEntry = ConfigEntry[HAAgentCoordinator]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -110,11 +111,11 @@ SENSOR_DESCRIPTIONS: tuple[HAAgentSensorDescription, ...] = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HASelHealingConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Richtet Sensor-Entitäten für einen ConfigEntry ein."""
-    coordinator: HAAgentCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: HAAgentCoordinator = entry.runtime_data
 
     async_add_entities(
         HAAgentSensor(coordinator, description)

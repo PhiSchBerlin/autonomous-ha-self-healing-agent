@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import logging
 
+import voluptuous as vol
 import httpx
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import config_validation as cv, issue_registry as ir
 
 from .const import (
     ACTION_APPROVE_REPAIR,
@@ -29,7 +30,7 @@ from .coordinator import HAAgentCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-type HASelHealingConfigEntry = ConfigEntry[HAAgentCoordinator]
+type HASelHealingConfigEntry = ConfigEntry[HAAgentCoordinator]  # runtime_data = coordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -65,7 +66,7 @@ class AgentClient:
 
     async def approve_repair(self, repair_action_id: str, reason: str | None = None) -> dict:
         response = await self._client.post(
-            f"/api/v1/repair/approve/{repair_action_id}",
+            f"/api/v1/repair/{repair_action_id}/approve",
             json={"approved": True, "reason": reason},
         )
         response.raise_for_status()
@@ -73,7 +74,7 @@ class AgentClient:
 
     async def reject_repair(self, repair_action_id: str, reason: str | None = None) -> dict:
         response = await self._client.post(
-            f"/api/v1/repair/approve/{repair_action_id}",
+            f"/api/v1/repair/{repair_action_id}/approve",
             json={"approved": False, "reason": reason},
         )
         response.raise_for_status()
@@ -107,14 +108,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: HASelHealingConfigEntry)
 
     # Coordinator anlegen und initial abfragen
     coordinator = HAAgentCoordinator(hass, agent_url, int(scan_interval))
+    coordinator.client = client  # für direkte Service-Calls
     await coordinator.async_config_entry_first_refresh()
 
-    # Im hass.data speichern
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = coordinator
-
-    # Client für direkte Service-Calls speichern
-    hass.data[DOMAIN][f"{entry.entry_id}_client"] = client
+    # Modernes HA-Pattern: runtime_data statt hass.data
+    entry.runtime_data = coordinator
 
     # Sensor-Platform laden
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -143,16 +141,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: HASelHealingConfigEntry
             ACTION_RUN_SECURITY_SCAN,
             ACTION_APPROVE_REPAIR,
             ACTION_REJECT_REPAIR,
-            "run_full_audit",
+            ACTION_RUN_FULL_AUDIT,
         ):
             if hass.services.has_service(DOMAIN, action):
                 hass.services.async_remove(DOMAIN, action)
 
-        client: AgentClient = hass.data[DOMAIN].pop(f"{entry.entry_id}_client", None)
-        if client:
+        coordinator: HAAgentCoordinator = entry.runtime_data
+        if client := getattr(coordinator, "client", None):
             await client.close()
-
-        hass.data[DOMAIN].pop(entry.entry_id, None)
 
     return unload_ok
 
@@ -241,18 +237,49 @@ async def _register_actions(
         except Exception as exc:
             _LOGGER.error("Full-Audit fehlgeschlagen: %s", exc)
 
-    hass.services.async_register(DOMAIN, ACTION_RUN_LOG_ANALYSIS, handle_run_log_analysis)
-    hass.services.async_register(DOMAIN, ACTION_RUN_SECURITY_SCAN, handle_run_security_scan)
-    hass.services.async_register(DOMAIN, ACTION_APPROVE_REPAIR, handle_approve_repair)
-    hass.services.async_register(DOMAIN, ACTION_REJECT_REPAIR, handle_reject_repair)
-    hass.services.async_register(DOMAIN, "run_full_audit", handle_run_full_audit)
+    hass.services.async_register(
+        DOMAIN,
+        ACTION_RUN_LOG_ANALYSIS,
+        handle_run_log_analysis,
+        schema=vol.Schema({vol.Optional("logs", default=[]): list}),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        ACTION_RUN_SECURITY_SCAN,
+        handle_run_security_scan,
+        schema=vol.Schema({vol.Optional("ha_config_path", default="/config"): cv.string}),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        ACTION_APPROVE_REPAIR,
+        handle_approve_repair,
+        schema=vol.Schema({
+            vol.Required("repair_action_id"): cv.string,
+            vol.Optional("reason"): vol.Any(None, cv.string),
+        }),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        ACTION_REJECT_REPAIR,
+        handle_reject_repair,
+        schema=vol.Schema({
+            vol.Required("repair_action_id"): cv.string,
+            vol.Optional("reason"): vol.Any(None, cv.string),
+        }),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        ACTION_RUN_FULL_AUDIT,
+        handle_run_full_audit,
+        schema=vol.Schema({vol.Optional("ha_config_path", default="/config"): cv.string}),
+    )
 
 
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: HASelHealingConfigEntry
 ) -> dict:
     """Gibt Diagnosedaten für die Config Entry zurück (ohne sensible Daten)."""
-    coordinator: HAAgentCoordinator = hass.data[DOMAIN].get(entry.entry_id)
+    coordinator: HAAgentCoordinator = entry.runtime_data
     data = coordinator.data if coordinator else None
 
     return {
