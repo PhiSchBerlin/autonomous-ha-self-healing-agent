@@ -3,12 +3,16 @@ Zentrales Konfigurationssystem mit Pydantic v2 Settings.
 
 Alle Einstellungen können über Umgebungsvariablen oder eine .env-Datei
 überschrieben werden. Sensible Felder werden nie geloggt.
+
+Architektur: Jede Sub-Settings-Klasse ist eine eigenständige BaseSettings-Instanz
+mit ihrem eigenen env_prefix. AppSettings aggregiert sie nach der Konstruktion,
+sodass jedes Prefix korrekt aufgelöst wird (pydantic-settings v2 Muster).
 """
 
+from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Annotated
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from models.enums import AgentMode, LLMBackendType
@@ -27,13 +31,11 @@ class LLMSettings(BaseSettings):
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     max_tokens: int = Field(default=4096, ge=1)
     timeout_seconds: int = Field(default=120, ge=1)
-    max_retries: int = Field(default=1, ge=0)  # reduziert: 2 Versuche total, schnellerer Fallback
+    max_retries: int = Field(default=1, ge=0)
 
-    # Cloud-Datenschutz
     anonymize_sensitive_data: bool = True
     cloud_enabled: bool = False
 
-    # Fallback-Backend (optional, zweiter Ollama-Server)
     fallback_base_url: str | None = None
     fallback_model: str | None = None
 
@@ -77,11 +79,11 @@ class SecuritySettings(BaseSettings):
     allow_autonomous_file_writes: bool = False
     allow_shell_execution: bool = False
     allow_docker_access: bool = False
-    max_file_size_bytes: int = Field(default=10_485_760, ge=1)  # 10 MB
+    max_file_size_bytes: int = Field(default=10_485_760, ge=1)
 
 
-class AppSettings(BaseSettings):
-    """Haupt-App-Konfiguration."""
+class _AppBaseSettings(BaseSettings):
+    """Nur die flachen App-Felder — keine verschachtelten BaseSettings."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -92,12 +94,7 @@ class AppSettings(BaseSettings):
     port: int = Field(default=8765, ge=1, le=65535)
 
     log_level: str = "INFO"
-    log_format: str = "text"  # json | text — text zeigt Timestamps im Klartext
-
-    llm: LLMSettings = Field(default_factory=LLMSettings)
-    agent: AgentSettings = Field(default_factory=AgentSettings)
-    ha: HASettings = Field(default_factory=HASettings)
-    security: SecuritySettings = Field(default_factory=SecuritySettings)
+    log_format: str = "text"
 
     @field_validator("log_level")
     @classmethod
@@ -109,7 +106,48 @@ class AppSettings(BaseSettings):
         return upper
 
 
+@dataclass
+class AppSettings:
+    """
+    Aggregierte App-Konfiguration.
+
+    Jede Sub-Settings-Instanz liest eigenständig aus der Umgebung mit
+    ihrem eigenen env_prefix — das ist das korrekte pydantic-settings v2 Muster
+    für verschachtelte Konfigurationen mit unterschiedlichen Prefixen.
+    """
+
+    app_name: str = field(default="HA Self-Healing Agent")
+    version: str = field(default="1.4.0")
+    debug: bool = field(default=False)
+    host: str = field(default="0.0.0.0")
+    port: int = field(default=8765)
+    log_level: str = field(default="INFO")
+    log_format: str = field(default="text")
+
+    llm: LLMSettings = field(default_factory=LLMSettings)
+    agent: AgentSettings = field(default_factory=AgentSettings)
+    ha: HASettings = field(default_factory=HASettings)
+    security: SecuritySettings = field(default_factory=SecuritySettings)
+
+    @classmethod
+    def load(cls) -> "AppSettings":
+        base = _AppBaseSettings()
+        return cls(
+            app_name=base.app_name,
+            version=base.version,
+            debug=base.debug,
+            host=base.host,
+            port=base.port,
+            log_level=base.log_level,
+            log_format=base.log_format,
+            llm=LLMSettings(),
+            agent=AgentSettings(),
+            ha=HASettings(),
+            security=SecuritySettings(),
+        )
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> AppSettings:
     """Gibt die gecachte App-Konfiguration zurück (Singleton)."""
-    return AppSettings()
+    return AppSettings.load()

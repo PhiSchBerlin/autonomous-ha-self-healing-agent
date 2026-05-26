@@ -140,9 +140,11 @@ def parse_ha_core_log(raw_text: str, source: LogSource = LogSource.HA_CORE) -> l
 
     # Tracebacks nachträglich den passenden Einträgen zuordnen
     tracebacks = _extract_tracebacks(raw_text)
-    for i, entry in enumerate(entries):
-        if entry.level in ("ERROR", "CRITICAL") and i < len(tracebacks):
-            entry.traceback = tracebacks[0]
+    tb_index = 0
+    for entry in entries:
+        if entry.level in ("ERROR", "CRITICAL") and tb_index < len(tracebacks):
+            entry.traceback = tracebacks[tb_index]
+            tb_index += 1
 
     return entries
 

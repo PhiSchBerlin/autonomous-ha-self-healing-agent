@@ -85,6 +85,11 @@ def get_history_actions() -> list[dict[str, Any]]:
     return [a for a in get_all_actions() if a.get("status") in history_statuses]
 
 
-# Beim Import aus Datei laden
-_actions = _load_from_disk()
-logger.info("Repair-Store: %d Aktionen aus /data geladen.", len(_actions))
+def _restore_from_disk() -> None:
+    global _actions
+    _actions = _load_from_disk()
+    if _actions:
+        logger.info("Repair-Store: %d Aktionen aus /data geladen.", len(_actions))
+
+
+_restore_from_disk()
