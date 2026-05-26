@@ -1,9 +1,8 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.21
 FROM ${BUILD_FROM}
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl gcc g++ make libffi-dev libssl-dev jq \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+    git curl gcc g++ make libffi-dev openssl-dev musl-dev jq
 
 WORKDIR /app
 
