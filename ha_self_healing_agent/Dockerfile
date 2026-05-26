@@ -45,15 +45,16 @@ RUN mkdir -p /data/chromadb /data/backups /data/logs
 # ONNX-Embedding-Modell beim Build cachen (79 MB) → kein Download beim ersten Start
 ENV CHROMA_CACHE_DIR=/data/chroma_cache
 RUN mkdir -p /data/chroma_cache && python - <<'EOF'
-import os
+import os, sys
 os.environ["CHROMA_CACHE_DIR"] = "/data/chroma_cache"
-import chromadb
-client = chromadb.PersistentClient(path="/data/chromadb")
-col = client.get_or_create_collection("warmup", embedding_function=None)
-from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
-ef = ONNXMiniLM_L6_V2(preferred_providers=["CPUExecutionProvider"])
-ef(["warmup"])
-print("ONNX model pre-cached to /data/chroma_cache")
+try:
+    import chromadb
+    from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import ONNXMiniLM_L6_V2
+    ef = ONNXMiniLM_L6_V2(preferred_providers=["CPUExecutionProvider"])
+    ef(["warmup"])
+    print("ONNX model pre-cached to /data/chroma_cache")
+except Exception as e:
+    print(f"ONNX warmup fehlgeschlagen (nicht kritisch): {e}", file=sys.stderr)
 EOF
 
 COPY run.sh /run.sh
