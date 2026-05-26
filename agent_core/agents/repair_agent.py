@@ -255,7 +255,6 @@ class RepairAgent(BaseAgent):
                 )
             )
 
-        finding_data = state.context.get("finding_obj", {})
         repair = RepairAction(
             finding_id=finding_id,
             title=patch_data.get("title", "Automatischer Patch"),

@@ -127,6 +127,9 @@ class OllamaBackend(BaseLLMBackend):
         except Exception:
             return False
 
+    async def __aenter__(self) -> "OllamaBackend":
+        return self
+
     async def __aexit__(self, *args: Any) -> None:
         if self._client:
             await self._client.aclose()

@@ -104,7 +104,9 @@ class ValidationAgent(BaseAgent):
         repair = RepairAction(**repair_data) if isinstance(repair_data, dict) else repair_data
 
         sandbox = SandboxManager.from_repair_action(repair)
-        sandbox.__enter__()  # Lebensdauer über den gesamten Workflow — Cleanup in _node_generate_report
+        # initialize() statt __enter__() — Cleanup in _node_generate_report via
+        # shutil.rmtree, weil der Context-Manager die Knotengrenze nicht überlebt.
+        sandbox.initialize()
 
         logger.info(
             "Sandbox erstellt: %d Dateien in %s", len(sandbox.files), sandbox.directory
@@ -139,7 +141,6 @@ class ValidationAgent(BaseAgent):
             # Zusätzlich: pyyaml safe_load
             try:
                 import yaml
-                Path(sandbox_path).read_text(encoding="utf-8")
                 with open(sandbox_path) as f:
                     yaml.safe_load(f)
             except Exception as exc:

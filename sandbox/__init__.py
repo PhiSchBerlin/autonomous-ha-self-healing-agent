@@ -40,7 +40,12 @@ class SandboxManager:
         self._tmpdir: str | None = None
         self._file_map: dict[str, str] = {}  # original_path → sandbox_path
 
-    def __enter__(self) -> "SandboxManager":
+    def initialize(self) -> "SandboxManager":
+        """Initialisiert die Sandbox ohne Context-Manager-Protokoll.
+
+        Verwende dies wenn die Sandbox Knotengrenzen eines LangGraph-Workflows
+        überleben muss. Cleanup muss dann explizit via cleanup() erfolgen.
+        """
         self._tmpdir = tempfile.mkdtemp(prefix="ha_agent_sandbox_")
         for change in self._changes:
             orig_path = change.get("file_path", "")
@@ -53,6 +58,13 @@ class SandboxManager:
             self._file_map[orig_path] = str(sandbox_path)
         logger.debug("Sandbox erstellt: %s (%d Dateien)", self._tmpdir, len(self._file_map))
         return self
+
+    def cleanup(self) -> None:
+        """Räumt die Sandbox auf — Gegenstück zu initialize()."""
+        self._cleanup()
+
+    def __enter__(self) -> "SandboxManager":
+        return self.initialize()
 
     def __exit__(
         self,
