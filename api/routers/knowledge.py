@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -18,7 +18,7 @@ class KnowledgeStoreRequest(BaseModel):
     topic: str
     content: str
     source: str = "user"
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
 
 
 class FullAuditRequest(BaseModel):
