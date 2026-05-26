@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 _DATA_DIR = Path(os.environ.get("DATA_PATH", "/data"))
 _ISSUES_FILE = _DATA_DIR / "security_issues.json"
 
-# In-Memory-Cache für schnellen Zugriff
-_latest_issues: list["SecurityIssue"] = []
+# In-Memory-Cache — None bedeutet "noch nicht geladen"
+_latest_issues: list["SecurityIssue"] | None = None
 
 
 def _load_from_disk() -> list[dict[str, Any]]:
@@ -41,14 +41,14 @@ def _save_to_disk(issues: list["SecurityIssue"]) -> None:
         logger.error("Security-Issues konnten nicht gespeichert werden: %s", exc)
 
 
-def _restore_from_disk() -> None:
-    """Lädt persistierte Issues beim Start in den In-Memory-Cache."""
+def _ensure_loaded() -> None:
+    """Lädt Daten von Disk beim ersten Zugriff (lazy initialization)."""
     global _latest_issues
+    if _latest_issues is not None:
+        return
     from models.security_models import SecurityIssue
 
     raw = _load_from_disk()
-    if not raw:
-        return
     restored: list[SecurityIssue] = []
     for item in raw:
         try:
@@ -56,7 +56,8 @@ def _restore_from_disk() -> None:
         except Exception:
             pass
     _latest_issues = restored
-    logger.info("Security-Store: %d Issues aus /data geladen.", len(_latest_issues))
+    if restored:
+        logger.info("Security-Store: %d Issues aus /data geladen.", len(restored))
 
 
 def set_latest_issues(issues: list["SecurityIssue"]) -> None:
@@ -66,8 +67,5 @@ def set_latest_issues(issues: list["SecurityIssue"]) -> None:
 
 
 def get_latest_issues() -> list["SecurityIssue"]:
-    return list(_latest_issues)
-
-
-# Beim Import sofort aus Datei laden (läuft beim ersten Import durch den Router)
-_restore_from_disk()
+    _ensure_loaded()
+    return list(_latest_issues or [])

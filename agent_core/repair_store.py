@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,8 @@ _DATA_DIR = Path(os.environ.get("DATA_PATH", "/data"))
 _STORE_FILE = _DATA_DIR / "repair_actions.json"
 
 _actions: dict[str, dict[str, Any]] = {}
+_lock = threading.Lock()
+_loaded: bool = False
 
 
 def _load_from_disk() -> dict[str, dict[str, Any]]:
@@ -43,34 +46,56 @@ def _save_to_disk() -> None:
         logger.error("Repair-Store konnte nicht gespeichert werden: %s", exc)
 
 
+def _ensure_loaded() -> None:
+    """Lädt Daten von Disk beim ersten Zugriff (lazy initialization, thread-safe)."""
+    global _actions, _loaded
+    if _loaded:
+        return
+    with _lock:
+        if _loaded:
+            return
+        _actions = _load_from_disk()
+        _loaded = True
+        if _actions:
+            logger.info("Repair-Store: %d Aktionen aus /data geladen.", len(_actions))
+
+
 def add_action(action: dict[str, Any]) -> str:
     """Fügt eine neue RepairAction ein. Gibt die ID zurück."""
+    _ensure_loaded()
     if "id" not in action:
         action["id"] = str(uuid4())
     action.setdefault("created_at", datetime.now(UTC).isoformat())
     action.setdefault("updated_at", datetime.now(UTC).isoformat())
     action.setdefault("status", "proposed")
-    _actions[action["id"]] = action
-    _save_to_disk()
+    with _lock:
+        _actions[action["id"]] = action
+        _save_to_disk()
     return action["id"]
 
 
 def update_action(action_id: str, updates: dict[str, Any]) -> bool:
     """Aktualisiert eine bestehende RepairAction."""
-    if action_id not in _actions:
-        return False
-    _actions[action_id].update(updates)
-    _actions[action_id]["updated_at"] = datetime.now(UTC).isoformat()
-    _save_to_disk()
+    _ensure_loaded()
+    with _lock:
+        if action_id not in _actions:
+            return False
+        _actions[action_id].update(updates)
+        _actions[action_id]["updated_at"] = datetime.now(UTC).isoformat()
+        _save_to_disk()
     return True
 
 
 def get_action(action_id: str) -> dict[str, Any] | None:
-    return _actions.get(action_id)
+    _ensure_loaded()
+    with _lock:
+        return _actions.get(action_id)
 
 
 def get_all_actions() -> list[dict[str, Any]]:
-    return sorted(_actions.values(), key=lambda a: a.get("created_at", ""), reverse=True)
+    _ensure_loaded()
+    with _lock:
+        return sorted(_actions.values(), key=lambda a: a.get("created_at", ""), reverse=True)
 
 
 def get_pending_actions() -> list[dict[str, Any]]:
@@ -83,13 +108,3 @@ def get_history_actions() -> list[dict[str, Any]]:
     """Abgeschlossene Aktionen: applied, approved, rejected, failed, rolled_back."""
     history_statuses = {"applied", "approved", "rejected", "failed", "rolled_back"}
     return [a for a in get_all_actions() if a.get("status") in history_statuses]
-
-
-def _restore_from_disk() -> None:
-    global _actions
-    _actions = _load_from_disk()
-    if _actions:
-        logger.info("Repair-Store: %d Aktionen aus /data geladen.", len(_actions))
-
-
-_restore_from_disk()

@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 _DATA_DIR = Path(os.environ.get("DATA_PATH", "/data"))
 _AUDIT_FILE = _DATA_DIR / "audit_results.json"
 
+# None bedeutet "noch nicht geladen"
 _latest_audit: dict[str, Any] | None = None
+_loaded: bool = False
 
 
 def _load_from_disk() -> dict[str, Any] | None:
@@ -37,22 +39,28 @@ def _save_to_disk(result: dict[str, Any]) -> None:
         logger.error("Audit-Ergebnisse konnten nicht gespeichert werden: %s", exc)
 
 
+def _ensure_loaded() -> None:
+    """Lädt Daten von Disk beim ersten Zugriff (lazy initialization)."""
+    global _latest_audit, _loaded
+    if _loaded:
+        return
+    _loaded = True
+    _latest_audit = _load_from_disk()
+    if _latest_audit:
+        logger.info(
+            "Audit-Store: letztes Ergebnis von %s geladen.",
+            _latest_audit.get("saved_at", "?"),
+        )
+
+
 def set_latest_audit(result: dict[str, Any]) -> None:
-    global _latest_audit
+    global _latest_audit, _loaded
     result["saved_at"] = datetime.now(UTC).isoformat()
     _latest_audit = result
+    _loaded = True
     _save_to_disk(result)
 
 
 def get_latest_audit() -> dict[str, Any] | None:
+    _ensure_loaded()
     return _latest_audit
-
-
-def _restore_from_disk() -> None:
-    global _latest_audit
-    _latest_audit = _load_from_disk()
-    if _latest_audit:
-        logger.info("Audit-Store: letztes Ergebnis von %s geladen.", _latest_audit.get("saved_at", "?"))
-
-
-_restore_from_disk()
