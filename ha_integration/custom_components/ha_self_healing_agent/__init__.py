@@ -102,14 +102,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: HASelHealingConfigEntry)
 
     # Erreichbarkeit prüfen
     client = AgentClient(agent_url)
-    if not await client.health_check():
-        await client.close()
-        raise ConfigEntryNotReady(f"Agent unter {agent_url} nicht erreichbar")
+    try:
+        if not await client.health_check():
+            raise ConfigEntryNotReady(f"Agent unter {agent_url} nicht erreichbar")
 
-    # Coordinator anlegen und initial abfragen
-    coordinator = HAAgentCoordinator(hass, agent_url, int(scan_interval))
-    coordinator.client = client  # für direkte Service-Calls
-    await coordinator.async_config_entry_first_refresh()
+        # Coordinator anlegen und initial abfragen
+        coordinator = HAAgentCoordinator(hass, agent_url, int(scan_interval))
+        coordinator.client = client  # für direkte Service-Calls
+        await coordinator.async_config_entry_first_refresh()
+    except ConfigEntryNotReady:
+        await client.close()
+        raise
+    except Exception as exc:
+        await client.close()
+        raise ConfigEntryNotReady(f"Fehler beim Einrichten des Agents: {exc}") from exc
 
     # Modernes HA-Pattern: runtime_data statt hass.data
     entry.runtime_data = coordinator

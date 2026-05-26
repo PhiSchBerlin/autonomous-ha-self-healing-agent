@@ -77,7 +77,7 @@ class HAAgentCoordinator(DataUpdateCoordinator[AgentCoordinatorData]):
                     data.agent_reachable = False
                     return data
 
-                # Agent-Status (pending approvals)
+                # Agent-Status (pending approvals, Modus)
                 try:
                     status_resp = await client.get("/api/v1/agents/health")
                     if status_resp.status_code == 200:
@@ -87,10 +87,42 @@ class HAAgentCoordinator(DataUpdateCoordinator[AgentCoordinatorData]):
                 except Exception:
                     pass
 
-                # Repair-History (letzte Statistiken)
+                # Security-Issues-Zusammenfassung
+                try:
+                    sec_resp = await client.get("/api/v1/security/issues/summary")
+                    if sec_resp.status_code == 200:
+                        sec = sec_resp.json()
+                        data.security_issues_count = sec.get("total", 0)
+                except Exception:
+                    pass
+
+                # Audit-Ergebnisse (Findings, Risiko-Score)
+                try:
+                    audit_resp = await client.get("/api/v1/agents/full-audit/latest")
+                    if audit_resp.status_code == 200:
+                        audit = audit_resp.json()
+                        data.findings_count = audit.get("findings_count", 0)
+                        data.critical_findings = audit.get("critical_findings", 0)
+                        data.high_findings = audit.get("high_findings", 0)
+                        data.overall_risk_score = audit.get("overall_risk_score", 0.0)
+                        data.last_run_id = audit.get("run_id", "")
+                        data.last_scan_duration = audit.get("duration_seconds", 0.0)
+                except Exception:
+                    pass
+
+                # Ausstehende Repair-Actions (proposed/validated)
+                try:
+                    pending_resp = await client.get("/api/v1/repair/pending")
+                    if pending_resp.status_code == 200:
+                        pending = pending_resp.json()
+                        data.repairs_proposed = len(pending.get("pending", []))
+                except Exception:
+                    pass
+
+                # Repair-History (angewendete Reparaturen)
                 try:
                     history_resp = await client.get(
-                        "/api/v1/repair/history", params={"max_commits": 5}
+                        "/api/v1/repair/history", params={"max_commits": 50}
                     )
                     if history_resp.status_code == 200:
                         history = history_resp.json()
