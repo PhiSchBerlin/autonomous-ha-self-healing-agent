@@ -250,7 +250,7 @@ class TestEnvExample:
 
 
 class TestHAAddon:
-    ADDON_DIR = "ha_addon"
+    ADDON_DIR = "ha_self_healing_agent"
 
     def test_config_yaml_exists(self):
         assert (PROJECT_ROOT / self.ADDON_DIR / "config.yaml").is_file()

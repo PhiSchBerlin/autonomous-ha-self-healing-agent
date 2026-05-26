@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 
-import voluptuous as vol
 import httpx
+import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
