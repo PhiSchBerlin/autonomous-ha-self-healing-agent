@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -20,7 +21,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 # ---------------------------------------------------------------------------
 
 
-def load_yaml(rel_path: str) -> dict:
+def load_yaml(rel_path: str) -> dict[str, Any]:
     """Lädt eine YAML-Datei relativ zum Projektverzeichnis."""
     path = PROJECT_ROOT / rel_path
     with open(path, encoding="utf-8") as f:

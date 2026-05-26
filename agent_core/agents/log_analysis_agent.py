@@ -328,7 +328,8 @@ def _extract_json(text: str) -> dict[str, Any]:
         return json.loads(stripped)
 
     # JSON-Block in Markdown suchen
-    fence_match = __import__("re").search(r"```(?:json)?\s*(\{.+?\})\s*```", stripped, __import__("re").S)
+    import re as _re
+    fence_match = _re.search(r"```(?:json)?\s*(\{.+?\})\s*```", stripped, _re.S)
     if fence_match:
         return json.loads(fence_match.group(1))
 

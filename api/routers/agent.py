@@ -3,9 +3,9 @@
 import asyncio
 import logging
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
