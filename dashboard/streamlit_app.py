@@ -93,30 +93,32 @@ def _poll_repair_job(job_id: str) -> dict[str, Any] | None:
         return None
 
 
-def _render_repair_job_status(job_id: str, total: int) -> None:
-    """Zeigt Polling-UI für einen laufenden Repair-Job."""
-    placeholder = st.empty()
-    for _ in range(120):  # max 4 Minuten (120 × 2s)
-        job = _poll_repair_job(job_id)
-        if job is None:
-            placeholder.error("Job-Status nicht abrufbar")
-            break
-        completed = job.get("completed", 0)
-        status_txt = job.get("status", "running")
-        with placeholder.container():
-            st.progress(completed / max(total, 1), text=f"Repair-Fortschritt: {completed}/{total} Issues verarbeitet")
-            if status_txt == "done":
-                successful = job.get("successful", 0)
-                st.success(f"Reparatur abgeschlossen: {successful}/{total} erfolgreich")
-                for r in job.get("results", []):
-                    if r.get("success"):
-                        st.info(f"✅ {r.get('issue_title', '')} — {r.get('repairs_proposed', 0)} Reparatur(en) vorgeschlagen")
-                    else:
-                        errs = "; ".join(r.get("errors", []) or [])
-                        st.warning(f"⚠️ {r.get('issue_title', '')} — {errs or 'Kein Patch generierbar'}")
-                st.cache_data.clear()
-                break
-        time.sleep(2)
+def _show_active_repair_job() -> None:
+    """Zeigt den aktuellen Status eines laufenden Repair-Jobs (nicht-blockierend)."""
+    job_id = st.session_state.get("active_repair_job_id")
+    if not job_id:
+        return
+    job = _poll_repair_job(job_id)
+    if job is None:
+        st.warning("Repair-Job läuft — Status temporär nicht abrufbar")
+        return
+    total = job.get("total", 1)
+    completed = job.get("completed", 0)
+    status_txt = job.get("status", "running")
+    st.progress(completed / max(total, 1), text=f"Repair-Fortschritt: {completed}/{total} Issues verarbeitet")
+    if status_txt == "done":
+        successful = job.get("successful", 0)
+        st.success(f"Reparatur abgeschlossen: {successful}/{total} erfolgreich")
+        for r in job.get("results", []):
+            if r.get("success"):
+                st.info(f"✅ {r.get('issue_title', '')} — {r.get('repairs_proposed', 0)} Reparatur(en) vorgeschlagen")
+            else:
+                errs = "; ".join(r.get("errors", []) or [])
+                st.warning(f"⚠️ {r.get('issue_title', '')} — {errs or 'Kein Patch generierbar'}")
+        st.session_state.pop("active_repair_job_id", None)
+        st.cache_data.clear()
+    else:
+        st.caption(f"Job läuft … wird alle {REFRESH_SECONDS}s aktualisiert")
 
 
 # ---------------------------------------------------------------------------
@@ -355,6 +357,8 @@ def page_findings() -> None:
         n_sel = len(st.session_state["selected_issue_ids"])
         st.caption(f"{len(filtered)} Issues angezeigt · {n_sel} ausgewählt zur Reparatur")
 
+    _show_active_repair_job()
+
     if n_sel > 0:
         if st.button(f"🔧 {n_sel} ausgewählte Issues reparieren lassen", type="primary"):
             selected_keys = st.session_state["selected_issue_ids"]
@@ -362,10 +366,11 @@ def page_findings() -> None:
             result = post_json("/api/v1/repair/issues", {
                 "issues": issues_to_repair,
                 "ha_config_path": "/config",
-            }, timeout=10.0)
+            }, timeout=30.0)
             if result and result.get("job_id"):
-                st.info(f"Repair-Job gestartet (ID: {result['job_id'][:8]}…) — {len(issues_to_repair)} Issues werden verarbeitet")
-                _render_repair_job_status(result["job_id"], result.get("total", len(issues_to_repair)))
+                st.session_state["active_repair_job_id"] = result["job_id"]
+                st.session_state["selected_issue_ids"] = set()
+                st.rerun()
             elif result:
                 st.warning("Job gestartet, aber keine Job-ID erhalten")
             else:
@@ -496,6 +501,8 @@ def page_approvals() -> None:
                 n_ap_sel = len(st.session_state["ap_selected_ids"])
                 st.caption(f"{len(filtered_sec)} Issues angezeigt · {n_ap_sel} ausgewählt")
 
+            _show_active_repair_job()
+
             if n_ap_sel > 0:
                 if st.button(f"🔧 {n_ap_sel} Issues reparieren lassen", type="primary", key="ap_repair_btn"):
                     selected_keys = st.session_state["ap_selected_ids"]
@@ -503,11 +510,11 @@ def page_approvals() -> None:
                     result = post_json("/api/v1/repair/issues", {
                         "issues": issues_to_repair,
                         "ha_config_path": "/config",
-                    }, timeout=10.0)
+                    }, timeout=30.0)
                     if result and result.get("job_id"):
-                        st.info(f"Repair-Job gestartet (ID: {result['job_id'][:8]}…) — {len(issues_to_repair)} Issues werden verarbeitet")
+                        st.session_state["active_repair_job_id"] = result["job_id"]
                         st.session_state["ap_selected_ids"] = set()
-                        _render_repair_job_status(result["job_id"], result.get("total", len(issues_to_repair)))
+                        st.rerun()
                     elif result:
                         st.warning("Job gestartet, aber keine Job-ID erhalten")
                     else:
@@ -973,6 +980,10 @@ _PAGES = {
 
 _PAGES[page]()
 
-# Auto-Refresh
-time.sleep(0.1)
-st.empty()
+# Auto-Refresh: schneller wenn ein Repair-Job läuft
+if st.session_state.get("active_repair_job_id"):
+    time.sleep(5)
+    st.rerun()
+else:
+    time.sleep(0.1)
+    st.empty()
