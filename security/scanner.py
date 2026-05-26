@@ -419,6 +419,44 @@ def scan_manifest_json(file_path: str, content: str) -> list[SecurityIssue]:
             )
         )
 
+    # iot_class prüfen — cloud_polling/cloud_push erhöhen Angriffsfläche
+    iot_class: str = manifest.get("iot_class", "")
+    if iot_class in ("cloud_polling", "cloud_push"):
+        issues.append(
+            SecurityIssue(
+                check_type=SecurityCheckType.INSECURE_COMPONENT,
+                title="Custom Component mit Cloud-Abhängigkeit",
+                description=(
+                    f"{Path(file_path).parent.name} nutzt iot_class='{iot_class}': "
+                    "Daten verlassen das lokale Netzwerk."
+                ),
+                severity=FindingSeverity.INFO,
+                file_path=file_path,
+                risk_score=1.0,
+                remediation=(
+                    "Prüfen ob eine lokale Alternative (local_polling/local_push) verfügbar ist. "
+                    "Cloud-Integrationen nur aus vertrauenswürdigen Quellen installieren."
+                ),
+            )
+        )
+
+    # Fehlende codeowners — kein verantwortlicher Maintainer bekannt
+    if not manifest.get("codeowners"):
+        issues.append(
+            SecurityIssue(
+                check_type=SecurityCheckType.INSECURE_COMPONENT,
+                title="Custom Component ohne Codeowner",
+                description=(
+                    f"{Path(file_path).parent.name} hat keinen 'codeowners'-Eintrag: "
+                    "Kein verantwortlicher Maintainer dokumentiert."
+                ),
+                severity=FindingSeverity.INFO,
+                file_path=file_path,
+                risk_score=0.5,
+                remediation="codeowners-Feld in manifest.json mit GitHub-Handles befüllen.",
+            )
+        )
+
     return issues
 
 

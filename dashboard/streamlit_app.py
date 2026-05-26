@@ -17,22 +17,21 @@ Konfiguration via Umgebungsvariablen:
 
 from __future__ import annotations
 
-import os
 import time
 from datetime import datetime
 from typing import Any
 
-import httpx
 import streamlit as st
 
-# ---------------------------------------------------------------------------
-# Konfiguration
-# ---------------------------------------------------------------------------
-
-API_URL = os.getenv("AGENT_API_URL", "http://localhost:8765")
-# Externe URL für Browser-Links (API-Docs, etc.) — kann von localhost abweichen
-EXTERNAL_API_URL = os.getenv("AGENT_EXTERNAL_API_URL", API_URL.replace("localhost", "192.168.178.48").replace("127.0.0.1", "192.168.178.48"))
-REFRESH_SECONDS = int(os.getenv("DASHBOARD_REFRESH_SECONDS", "30"))
+from dashboard.api_client import (
+    API_URL,
+    EXTERNAL_API_URL,
+    REFRESH_SECONDS,
+    get_json,
+    get_text,
+    poll_repair_job,
+    post_json,
+)
 
 st.set_page_config(
     page_title="HA Self-Healing Agent",
@@ -43,54 +42,21 @@ st.set_page_config(
 
 
 # ---------------------------------------------------------------------------
-# API-Hilfsfunktionen
+# Gecachte API-Hilfsfunktionen (Cache-Wrapper um api_client)
 # ---------------------------------------------------------------------------
 
 
 @st.cache_data(ttl=REFRESH_SECONDS)
 def fetch_json(path: str) -> dict[str, Any] | None:
-    """Holt JSON-Daten vom Agent-Backend. Gibt None bei Fehler zurück."""
-    try:
-        resp = httpx.get(f"{API_URL}{path}", timeout=5.0)
-        resp.raise_for_status()
-        return resp.json()  # type: ignore[return-value]
-    except Exception:
-        return None
-
-
-def post_json(
-    path: str,
-    payload: dict[str, Any],
-    timeout: float = 180.0,
-) -> dict[str, Any] | None:
-    """Sendet einen POST-Request an das Backend."""
-    try:
-        resp = httpx.post(f"{API_URL}{path}", json=payload, timeout=timeout)
-        resp.raise_for_status()
-        return resp.json()  # type: ignore[return-value]
-    except Exception as exc:
-        st.error(f"API-Fehler: {exc}")
-        return None
+    return get_json(path)  # type: ignore[return-value]
 
 
 def fetch_text(path: str) -> str | None:
-    """Holt Text-Daten (z.B. Prometheus-Metriken) vom Backend."""
-    try:
-        resp = httpx.get(f"{API_URL}{path}", timeout=5.0)
-        resp.raise_for_status()
-        return resp.text
-    except Exception:
-        return None
+    return get_text(path)
 
 
 def _poll_repair_job(job_id: str) -> dict[str, Any] | None:
-    """Pollt den Status eines Background-Repair-Jobs (ohne Cache)."""
-    try:
-        resp = httpx.get(f"{API_URL}/api/v1/repair/jobs/{job_id}", timeout=5.0)
-        resp.raise_for_status()
-        return resp.json()  # type: ignore[return-value]
-    except Exception:
-        return None
+    return poll_repair_job(job_id)
 
 
 def _show_active_repair_job() -> None:

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "Europe/Berlin",
+  "schedule": ["every weekend"],
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Python-Abhängigkeiten in pyproject.toml (minor + patch automatisch zusammenfassen)",
+      "matchManagers": ["pip_requirements", "pyproject"],
+      "groupName": "Python dependencies",
+      "automerge": false
+    },
+    {
+      "description": "Docker-Images in docker-compose.yml automatisch aktualisieren",
+      "matchManagers": ["docker-compose"],
+      "groupName": "Docker images",
+      "automerge": false
+    },
+    {
+      "description": "Basis-Images im Dockerfile",
+      "matchManagers": ["dockerfile"],
+      "groupName": "Dockerfile base images",
+      "automerge": false
+    },
+    {
+      "description": "Patch-Updates für alle Pakete automatisch mergen",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr"
+    }
+  ]
+}

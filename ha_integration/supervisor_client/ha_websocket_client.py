@@ -307,6 +307,37 @@ class HAWebSocketClient:
         except Exception as exc:
             logger.error("WebSocket Reader-Loop unterbrochen: %s", exc)
             self._connected = False
+            # Ausstehende Futures mit Fehler abschließen damit Aufrufer nicht hängen
+            for future in self._pending.values():
+                if not future.done():
+                    future.set_exception(HAWebSocketError(f"Verbindung unterbrochen: {exc}"))
+            self._pending.clear()
+
+    async def reconnect(self, max_attempts: int = 5, base_delay: float = 2.0) -> None:
+        """Versucht die Verbindung nach einem Verbindungsabbruch wiederherzustellen.
+
+        Nutzt exponentielles Backoff: Wartezeit verdoppelt sich nach jedem Fehlschlag
+        bis zum Maximum von base_delay * 2^(max_attempts-1) Sekunden.
+        """
+        await self.disconnect()
+        for attempt in range(1, max_attempts + 1):
+            delay = base_delay * (2 ** (attempt - 1))
+            logger.info(
+                "Reconnect-Versuch %d/%d (Wartezeit: %.0fs)…",
+                attempt,
+                max_attempts,
+                delay,
+            )
+            await asyncio.sleep(delay)
+            try:
+                await self.connect()
+                logger.info("Reconnect erfolgreich nach %d Versuch(en)", attempt)
+                return
+            except Exception as exc:
+                logger.warning("Reconnect-Versuch %d fehlgeschlagen: %s", attempt, exc)
+        raise HAWebSocketError(
+            f"Reconnect nach {max_attempts} Versuchen fehlgeschlagen"
+        )
 
     async def _dispatch(self, data: dict[str, Any]) -> None:
         """Verteilt eine eingehende Nachricht an pending Futures oder Subscriptions."""
