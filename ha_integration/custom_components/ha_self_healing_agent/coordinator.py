@@ -84,8 +84,8 @@ class HAAgentCoordinator(DataUpdateCoordinator[AgentCoordinatorData]):
                         status = status_resp.json()
                         data.agent_mode = status.get("mode", "advisory")
                         data.pending_approvals = status.get("pending_approvals", 0)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _LOGGER.debug("Agent-Status nicht abrufbar: %s", exc)
 
                 # Security-Issues-Zusammenfassung
                 try:
@@ -93,8 +93,8 @@ class HAAgentCoordinator(DataUpdateCoordinator[AgentCoordinatorData]):
                     if sec_resp.status_code == 200:
                         sec = sec_resp.json()
                         data.security_issues_count = sec.get("total", 0)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _LOGGER.debug("Security-Summary nicht abrufbar: %s", exc)
 
                 # Audit-Ergebnisse (Findings, Risiko-Score)
                 try:
@@ -107,8 +107,8 @@ class HAAgentCoordinator(DataUpdateCoordinator[AgentCoordinatorData]):
                         data.overall_risk_score = audit.get("overall_risk_score", 0.0)
                         data.last_run_id = audit.get("run_id", "")
                         data.last_scan_duration = audit.get("duration_seconds", 0.0)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _LOGGER.debug("Audit-Ergebnisse nicht abrufbar: %s", exc)
 
                 # Ausstehende Repair-Actions (proposed/validated)
                 try:
@@ -116,8 +116,8 @@ class HAAgentCoordinator(DataUpdateCoordinator[AgentCoordinatorData]):
                     if pending_resp.status_code == 200:
                         pending = pending_resp.json()
                         data.repairs_proposed = len(pending.get("pending", []))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _LOGGER.debug("Pending-Repairs nicht abrufbar: %s", exc)
 
                 # Repair-History (angewendete Reparaturen)
                 try:
@@ -130,8 +130,8 @@ class HAAgentCoordinator(DataUpdateCoordinator[AgentCoordinatorData]):
                         data.repairs_applied = len(
                             [c for c in commits if c.get("message", "").startswith("fix:")]
                         )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _LOGGER.debug("Repair-History nicht abrufbar: %s", exc)
 
                 # Knowledge-Stats
                 try:
@@ -139,8 +139,8 @@ class HAAgentCoordinator(DataUpdateCoordinator[AgentCoordinatorData]):
                     if knowledge_resp.status_code == 200:
                         kstats = knowledge_resp.json()
                         data.knowledge_entries = kstats.get("total_entries", 0)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _LOGGER.debug("Knowledge-Stats nicht abrufbar: %s", exc)
 
         except Exception as exc:
             _LOGGER.debug("Agent nicht erreichbar: %s", exc)

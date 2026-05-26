@@ -81,6 +81,10 @@ class OpenAICompatibleBackend(BaseLLMBackend):
         for attempt in range(self.config.max_retries + 1):
             try:
                 response = await client.post("/chat/completions", json=payload)
+                if response.status_code == 429:
+                    retry_after = float(response.headers.get("Retry-After", 2 ** attempt))
+                    await asyncio.sleep(retry_after)
+                    continue
                 response.raise_for_status()
                 data = response.json()
                 choice = data["choices"][0]

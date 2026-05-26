@@ -105,6 +105,19 @@ class AnthropicBackend(BaseLLMBackend):
                     raw=response.model_dump(),
                 )
             except Exception as exc:
+                # Anthropic SDK wirft RateLimitError bei 429 — Retry-after respektieren
+                try:
+                    import anthropic as _anthropic
+                    if isinstance(exc, _anthropic.RateLimitError):
+                        retry_after = float(
+                            getattr(exc, "response", None) and
+                            exc.response.headers.get("retry-after", 2 ** attempt)
+                            or 2 ** attempt
+                        )
+                        await asyncio.sleep(retry_after)
+                        continue
+                except ImportError:
+                    pass
                 if attempt == self.config.max_retries:
                     raise RuntimeError(f"Anthropic backend failed: {exc}") from exc
                 await asyncio.sleep(2**attempt)

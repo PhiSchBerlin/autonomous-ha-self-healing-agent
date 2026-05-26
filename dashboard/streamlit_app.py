@@ -17,7 +17,6 @@ Konfiguration via Umgebungsvariablen:
 
 from __future__ import annotations
 
-import time
 from datetime import datetime
 from typing import Any
 
@@ -1042,8 +1041,4 @@ _PAGES[page]()
 
 # Auto-Refresh: schneller wenn ein Repair-Job läuft
 if st.session_state.get("active_repair_job_id"):
-    time.sleep(5)
     st.rerun()
-else:
-    time.sleep(0.1)
-    st.empty()
