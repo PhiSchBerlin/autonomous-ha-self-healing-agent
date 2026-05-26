@@ -422,15 +422,11 @@ def scan_manifest_json(file_path: str, content: str) -> list[SecurityIssue]:
     return issues
 
 
-async def scan_directory(
+def _scan_directory_sync(
     directory: str,
-    check_types: list[SecurityCheckType] | None = None,
+    check_types: list[SecurityCheckType] | None,
 ) -> list[SecurityIssue]:
-    """
-    Scannt ein vollständiges Verzeichnis auf alle konfigurierten Security-Issues.
-
-    check_types=None → alle Checks aktiv.
-    """
+    """Synchroner Scan-Kern — wird via asyncio.to_thread() aufgerufen."""
     import glob
 
     all_issues: list[SecurityIssue] = []
@@ -481,6 +477,20 @@ async def scan_directory(
             all_issues.extend(scan_manifest_json(fp, content))
 
     return all_issues
+
+
+async def scan_directory(
+    directory: str,
+    check_types: list[SecurityCheckType] | None = None,
+) -> list[SecurityIssue]:
+    """
+    Scannt ein vollständiges Verzeichnis auf alle konfigurierten Security-Issues.
+
+    check_types=None → alle Checks aktiv.
+    Datei-I/O läuft in einem Thread-Pool um den Event-Loop nicht zu blockieren.
+    """
+    import asyncio
+    return await asyncio.to_thread(_scan_directory_sync, directory, check_types)
 
 
 async def lookup_cve_osv(package_name: str, version: str | None = None) -> list[dict[str, Any]]:

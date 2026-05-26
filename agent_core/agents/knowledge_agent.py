@@ -121,8 +121,8 @@ class KnowledgeAgent(BaseAgent):
 
     agent_type = AgentType.KNOWLEDGE
 
-    def __init__(self, llm: Any, config: Any, persist_directory: str = "/data/chromadb", **kwargs: Any) -> None:
-        super().__init__(llm, config, **kwargs)
+    def __init__(self, llm: Any, config: Any, persist_directory: str = "/data/chromadb") -> None:
+        super().__init__(llm, config)
         self._vector_store = HAVectorStore(persist_directory=persist_directory)
         self._knowledge_seeded = False
 

@@ -138,15 +138,6 @@ async def run_full_audit(
     return {"job_id": job_id, "status": "queued"}
 
 
-@router.get("/full-audit/{job_id}")
-async def get_full_audit_status(job_id: str) -> dict[str, Any]:
-    """Gibt den Status und das Ergebnis eines laufenden oder abgeschlossenen Audits zurück."""
-    job = _audit_jobs.get(job_id)
-    if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job nicht gefunden")
-    return {"job_id": job_id, **job}
-
-
 @router.get("/full-audit/latest")
 async def get_latest_audit() -> dict[str, Any]:
     """Gibt das zuletzt abgeschlossene Audit-Ergebnis zurück (persistent über Neustarts)."""
@@ -155,6 +146,15 @@ async def get_latest_audit() -> dict[str, Any]:
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Noch kein Audit gelaufen")
     return result
+
+
+@router.get("/full-audit/{job_id}")
+async def get_full_audit_status(job_id: str) -> dict[str, Any]:
+    """Gibt den Status und das Ergebnis eines laufenden oder abgeschlossenen Audits zurück."""
+    job = _audit_jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job nicht gefunden")
+    return {"job_id": job_id, **job}
 
 
 @router.get("/health")
