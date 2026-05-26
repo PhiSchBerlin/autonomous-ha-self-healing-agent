@@ -38,6 +38,7 @@ class LLMSettings(BaseSettings):
 
     fallback_base_url: str | None = None
     fallback_model: str | None = None
+    fallback_first_token_timeout_seconds: int = Field(default=0, ge=0, le=300)
 
     @field_validator("cloud_enabled", "anonymize_sensitive_data", mode="before")
     @classmethod

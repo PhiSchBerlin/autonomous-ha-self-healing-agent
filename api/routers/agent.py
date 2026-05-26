@@ -46,6 +46,9 @@ async def run_log_analysis(request: RunLogAnalysisRequest) -> dict[str, Any]:
         model=settings.llm.model,
         base_url=settings.llm.base_url,
         api_key=settings.llm.api_key.get_secret_value() if settings.llm.api_key else None,
+        fallback_base_url=settings.llm.fallback_base_url,
+        fallback_model=settings.llm.fallback_model,
+        fallback_first_token_timeout_seconds=settings.llm.fallback_first_token_timeout_seconds,
     )
     llm = create_llm_backend(llm_config)
 
@@ -100,6 +103,7 @@ async def _run_full_audit_background(job_id: str, req: FullAuditRequest) -> None
             api_key=settings.llm.api_key.get_secret_value() if settings.llm.api_key else None,
             fallback_base_url=settings.llm.fallback_base_url,
             fallback_model=settings.llm.fallback_model,
+            fallback_first_token_timeout_seconds=settings.llm.fallback_first_token_timeout_seconds,
         )
         llm = create_llm_backend(llm_config)
         orchestrator = AgentOrchestrator(llm, mode=AgentMode(settings.agent.mode))

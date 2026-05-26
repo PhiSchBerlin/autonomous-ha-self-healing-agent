@@ -51,6 +51,9 @@ class LLMBackendConfig(BaseModel):
     # Optionaler Fallback-Server (nur für Ollama)
     fallback_base_url: str | None = None
     fallback_model: str | None = None
+    # Wie viele Sekunden auf die erste Antwort des primären Servers gewartet wird,
+    # bevor auf den Fallback umgeschaltet wird (0 = kein separates First-Token-Timeout)
+    fallback_first_token_timeout_seconds: int = Field(default=0, ge=0, le=300)
 
 
 class BaseLLMBackend(ABC):

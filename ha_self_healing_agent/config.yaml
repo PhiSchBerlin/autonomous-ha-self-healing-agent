@@ -60,6 +60,7 @@ options:
   approval_timeout_seconds: 3600
   allow_autonomous_file_writes: false
   dashboard_refresh_seconds: 30
+  llm_fallback_first_token_timeout_seconds: 0
 
 schema:
   agent_mode: "list(advisory|approval|autonomous)"
@@ -75,6 +76,7 @@ schema:
   approval_timeout_seconds: int(60,86400)
   allow_autonomous_file_writes: bool
   dashboard_refresh_seconds: int(10,300)
+  llm_fallback_first_token_timeout_seconds: int(0,300)
 
 # ------------------------------------------------------------------
 # Persistente Datenspeicherung

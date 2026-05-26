@@ -17,6 +17,7 @@ export SECURITY_ALLOW_AUTONOMOUS_FILE_WRITES=$(bashio::config 'allow_autonomous_
 export DASHBOARD_REFRESH_SECONDS=$(bashio::config 'dashboard_refresh_seconds')
 export LLM_FALLBACK_BASE_URL=$(bashio::config 'llm_fallback_base_url' '')
 export LLM_FALLBACK_MODEL=$(bashio::config 'llm_fallback_model' '')
+export LLM_FALLBACK_FIRST_TOKEN_TIMEOUT_SECONDS=$(bashio::config 'llm_fallback_first_token_timeout_seconds')
 
 export SECURITY_ALLOW_SHELL_EXECUTION="false"
 export SECURITY_ALLOW_DOCKER_ACCESS="false"
