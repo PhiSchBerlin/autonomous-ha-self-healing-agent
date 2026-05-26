@@ -67,7 +67,7 @@ class TestScanFileForSecrets:
         assert any("Passwort" in t for t in titles)
 
     def test_detects_jwt_token(self):
-        content = 'token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
+        content = 'token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0LXVzZXItZmFrZSJ9.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA0'
         issues = scan_file_for_secrets("test.yaml", content)
         assert len(issues) > 0
 

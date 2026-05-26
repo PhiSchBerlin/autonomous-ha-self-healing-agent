@@ -613,8 +613,6 @@ class TestRepairActionModel:
 
     def test_touch_updates_timestamp(self, sample_repair_action: RepairAction):
         old_updated = sample_repair_action.updated_at
-        import time
-        time.sleep(0.001)
         sample_repair_action.touch()
         assert sample_repair_action.updated_at >= old_updated
 
