@@ -27,7 +27,7 @@ FROM python:3.12-slim AS runtime
 
 LABEL org.opencontainers.image.title="HA Self-Healing Agent" \
       org.opencontainers.image.description="Autonomer Home Assistant Self-Healing & Security AI Agent" \
-      org.opencontainers.image.version="0.1.0" \
+      org.opencontainers.image.version="1.4.4" \
       org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
