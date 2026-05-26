@@ -33,7 +33,7 @@ def _get_vector_store() -> Any:
     from agent_core.memory.vector_store import HAVectorStore
 
     settings = get_settings()
-    return HAVectorStore(persist_directory=getattr(settings, "chromadb_path", "/data/chromadb"))
+    return HAVectorStore(persist_directory="/data/chromadb")
 
 
 def _get_knowledge_agent() -> Any:

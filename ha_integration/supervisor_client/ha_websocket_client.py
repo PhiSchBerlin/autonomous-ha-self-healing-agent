@@ -283,7 +283,7 @@ class HAWebSocketClient:
             payload["id"] = self._next_id()
         msg_id: int = payload["id"]
 
-        future: asyncio.Future[dict[str, Any]] = asyncio.get_event_loop().create_future()
+        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
         self._pending[msg_id] = future
 
         await self._send_raw(payload)

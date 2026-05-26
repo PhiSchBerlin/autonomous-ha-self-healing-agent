@@ -1,5 +1,6 @@
 """FastAPI-Anwendung für den HA Self-Healing Agent."""
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -24,10 +25,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # nicht durch den ONNX-Download blockiert wird (Modell wird in /data/chroma_cache
     # gecacht und muss nur beim allerersten Start heruntergeladen werden).
     try:
-        import asyncio
         from agent_core.memory.vector_store import HAVectorStore
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, lambda: HAVectorStore().get_stats())
+        await asyncio.to_thread(HAVectorStore().get_stats)
         logger.info("ChromaDB Warm-up abgeschlossen")
     except Exception as _exc:
         logger.warning("ChromaDB Warm-up fehlgeschlagen (nicht kritisch): %s", _exc)

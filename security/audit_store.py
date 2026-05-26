@@ -48,7 +48,11 @@ def get_latest_audit() -> dict[str, Any] | None:
     return _latest_audit
 
 
-# Beim Import aus Datei laden
-_latest_audit = _load_from_disk()
-if _latest_audit:
-    logger.info("Audit-Store: letztes Ergebnis von %s geladen.", _latest_audit.get("saved_at", "?"))
+def _restore_from_disk() -> None:
+    global _latest_audit
+    _latest_audit = _load_from_disk()
+    if _latest_audit:
+        logger.info("Audit-Store: letztes Ergebnis von %s geladen.", _latest_audit.get("saved_at", "?"))
+
+
+_restore_from_disk()

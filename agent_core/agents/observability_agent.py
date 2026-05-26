@@ -41,8 +41,8 @@ class ObservabilityAgent(BaseAgent):
 
     agent_type = AgentType.OBSERVABILITY
 
-    def __init__(self, llm: Any, config: Any, ha_client: Any | None = None, **kwargs: Any) -> None:
-        super().__init__(llm, config, **kwargs)
+    def __init__(self, llm: Any, config: Any, ha_client: Any | None = None) -> None:
+        super().__init__(llm, config)
         self._ha_client = ha_client
         self._baseline: dict[str, Any] = {}
 
