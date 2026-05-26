@@ -1035,8 +1035,8 @@ def page_metrics() -> None:
 
     # Metriken nach Gruppen aufteilen
     lines = metrics_text.splitlines()
-    ha_metrics = [l for l in lines if l.startswith("ha_") or l.startswith("# HELP ha_") or l.startswith("# TYPE ha_")]
-    other_metrics = [l for l in lines if l not in ha_metrics and l.strip()]
+    ha_metrics = [line for line in lines if line.startswith("ha_") or line.startswith("# HELP ha_") or line.startswith("# TYPE ha_")]
+    other_metrics = [line for line in lines if line not in ha_metrics and line.strip()]
 
     tab1, tab2 = st.tabs(["HA Agent Metriken", "System-Metriken"])
 
