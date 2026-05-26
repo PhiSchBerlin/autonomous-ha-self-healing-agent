@@ -1,4 +1,5 @@
-FROM python:3.12-slim
+ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.12
+FROM ${BUILD_FROM}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl gcc g++ make libffi-dev libssl-dev jq \
