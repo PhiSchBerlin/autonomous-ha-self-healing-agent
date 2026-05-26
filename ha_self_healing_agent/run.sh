@@ -1,34 +1,22 @@
-#!/bin/bash
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
 set -euo pipefail
 
-OPTIONS="/data/options.json"
+bashio::log.info "HA Self-Healing Agent startet..."
 
-jq_str() {
-    jq -r --arg key "$1" '.[$key] // ""' "${OPTIONS}" 2>/dev/null || true
-}
-
-jq_bool() {
-    jq -r --arg key "$1" 'if .[$key] == true then "true" else "false" end' "${OPTIONS}" 2>/dev/null || echo "false"
-}
-
-jq_int() {
-    jq -r --arg key "$1" '.[$key] | numbers | tostring' "${OPTIONS}" 2>/dev/null || echo "$2"
-}
-
-export AGENT_MODE=$(jq_str 'agent_mode')
-export LLM_BACKEND_TYPE=$(jq_str 'llm_backend_type')
-export LLM_MODEL=$(jq_str 'llm_model')
-export LLM_BASE_URL=$(jq_str 'llm_base_url')
-export LLM_CLOUD_ENABLED=$(jq_bool 'llm_cloud_enabled')
-export LLM_ANONYMIZE_SENSITIVE_DATA=$(jq_bool 'llm_anonymize_sensitive_data')
-export LLM_API_KEY=$(jq_str 'llm_api_key')
-export LOG_LEVEL=$(jq_str 'log_level')
-export AGENT_APPROVAL_TIMEOUT_SECONDS=$(jq_int 'approval_timeout_seconds' '3600')
-export SECURITY_ALLOW_AUTONOMOUS_FILE_WRITES=$(jq_bool 'allow_autonomous_file_writes')
-export DASHBOARD_REFRESH_SECONDS=$(jq_int 'dashboard_refresh_seconds' '30')
-
-export LLM_FALLBACK_BASE_URL=$(jq_str 'llm_fallback_base_url')
-export LLM_FALLBACK_MODEL=$(jq_str 'llm_fallback_model')
+export AGENT_MODE=$(bashio::config 'agent_mode')
+export LLM_BACKEND_TYPE=$(bashio::config 'llm_backend_type')
+export LLM_MODEL=$(bashio::config 'llm_model')
+export LLM_BASE_URL=$(bashio::config 'llm_base_url')
+export LLM_CLOUD_ENABLED=$(bashio::config 'llm_cloud_enabled')
+export LLM_ANONYMIZE_SENSITIVE_DATA=$(bashio::config 'llm_anonymize_sensitive_data')
+export LLM_API_KEY=$(bashio::config 'llm_api_key' '')
+export LOG_LEVEL=$(bashio::config 'log_level')
+export AGENT_APPROVAL_TIMEOUT_SECONDS=$(bashio::config 'approval_timeout_seconds')
+export SECURITY_ALLOW_AUTONOMOUS_FILE_WRITES=$(bashio::config 'allow_autonomous_file_writes')
+export DASHBOARD_REFRESH_SECONDS=$(bashio::config 'dashboard_refresh_seconds')
+export LLM_FALLBACK_BASE_URL=$(bashio::config 'llm_fallback_base_url' '')
+export LLM_FALLBACK_MODEL=$(bashio::config 'llm_fallback_model' '')
 
 export SECURITY_ALLOW_SHELL_EXECUTION="false"
 export SECURITY_ALLOW_DOCKER_ACCESS="false"
@@ -41,8 +29,7 @@ export PORT="8765"
 export LOG_FORMAT="json"
 export PYTHONUNBUFFERED="1"
 
-echo "HA Self-Healing Agent startet..."
-echo "Modus: ${AGENT_MODE} | LLM: ${LLM_BACKEND_TYPE}/${LLM_MODEL}"
+bashio::log.info "Modus: ${AGENT_MODE} | LLM: ${LLM_BACKEND_TYPE}/${LLM_MODEL}"
 
 # Streamlit Dashboard im Hintergrund starten
 streamlit run /app/dashboard/streamlit_app.py \
@@ -55,7 +42,7 @@ streamlit run /app/dashboard/streamlit_app.py \
     &
 
 STREAMLIT_PID=$!
-echo "Streamlit gestartet (PID: ${STREAMLIT_PID})"
+bashio::log.info "Streamlit gestartet (PID: ${STREAMLIT_PID})"
 
 # FastAPI Agent im Vordergrund starten
 cd /app
