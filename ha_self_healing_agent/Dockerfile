@@ -2,7 +2,7 @@ FROM ghcr.io/home-assistant/aarch64-base-python:3.12-alpine3.21
 
 ARG BUILD_VERSION=1.5.0
 ARG BUILD_ARCH=aarch64
-ARG CACHE_BUST=20260527-1
+ARG CACHE_BUST=20260527-2
 
 RUN apk add --no-cache \
     git curl gcc g++ make libffi-dev openssl-dev musl-dev jq
@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir \
     "gitpython==3.1.43" \
     "prometheus-client==0.21.0" \
     "streamlit==1.40.2" \
-    "chromadb==0.5.23"
+    "chromadb==0.6.3"
 
 RUN echo "Cloning version ${BUILD_VERSION} (bust: ${CACHE_BUST})" && git clone --depth 1 --branch main \
     https://github.com/PhiSchBerlin/autonomous-ha-self-healing-agent.git /src \
@@ -42,20 +42,6 @@ RUN echo "Cloning version ${BUILD_VERSION} (bust: ${CACHE_BUST})" && git clone -
     && rm -rf /src
 
 RUN mkdir -p /data/chromadb /data/backups /data/logs
-
-ENV CHROMA_CACHE_DIR=/data/chroma_cache
-RUN mkdir -p /data/chroma_cache && python - <<'EOF'
-import os, sys
-os.environ["CHROMA_CACHE_DIR"] = "/data/chroma_cache"
-try:
-    import chromadb
-    from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import ONNXMiniLM_L6_V2
-    ef = ONNXMiniLM_L6_V2(preferred_providers=["CPUExecutionProvider"])
-    ef(["warmup"])
-    print("ONNX model pre-cached to /data/chroma_cache")
-except Exception as e:
-    print(f"ONNX warmup fehlgeschlagen (nicht kritisch): {e}", file=sys.stderr)
-EOF
 
 COPY run.sh /run.sh
 RUN chmod a+x /run.sh
