@@ -3,7 +3,7 @@ description: >
   Autonomous AI agent for self-healing and security monitoring of Home Assistant.
   Analyzes logs, detects configuration errors and suggests repairs -
   always with human control.
-version: "1.5.2"
+version: "1.5.3"
 slug: ha_self_healing_agent
 url: "https://github.com/PhiSchBerlin/autonomous-ha-self-healing-agent"
 arch:
