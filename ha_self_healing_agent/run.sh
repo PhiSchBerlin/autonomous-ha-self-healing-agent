@@ -29,6 +29,7 @@ export HOST="0.0.0.0"
 export PORT="8765"
 export LOG_FORMAT="json"
 export PYTHONUNBUFFERED="1"
+export PYTHONPATH="/app"
 
 bashio::log.info "Modus: ${AGENT_MODE} | LLM: ${LLM_BACKEND_TYPE}/${LLM_MODEL}"
 

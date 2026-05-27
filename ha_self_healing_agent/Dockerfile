@@ -2,7 +2,7 @@ FROM ghcr.io/home-assistant/aarch64-base-python:3.12-alpine3.21
 
 ARG BUILD_VERSION=1.5.0
 ARG BUILD_ARCH=aarch64
-ARG CACHE_BUST=20260527-3
+ARG CACHE_BUST=20260527-4
 
 RUN apk add --no-cache \
     git curl gcc g++ make libffi-dev openssl-dev musl-dev jq
