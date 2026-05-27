@@ -1,5 +1,8 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.21
-FROM ${BUILD_FROM}
+FROM ghcr.io/home-assistant/aarch64-base-python:3.12-alpine3.21
+
+ARG BUILD_VERSION=1.5.0
+ARG BUILD_ARCH=aarch64
+ARG CACHE_BUST=20260527-1
 
 RUN apk add --no-cache \
     git curl gcc g++ make libffi-dev openssl-dev musl-dev jq
@@ -9,23 +12,21 @@ WORKDIR /app
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 RUN pip install --no-cache-dir \
-    fastapi \
-    "uvicorn[standard]" \
-    "pydantic>=2.9.0" \
-    "pydantic-settings>=2.6.0" \
-    httpx \
-    "langgraph>=0.2.50" \
-    "langchain-core>=0.3.0" \
-    anthropic \
-    openai \
-    structlog \
-    gitpython \
-    prometheus-client \
-    "streamlit>=1.40.0" \
-    "chromadb>=0.5.0"
+    "fastapi==0.115.5" \
+    "uvicorn[standard]==0.32.1" \
+    "pydantic==2.9.2" \
+    "pydantic-settings==2.6.1" \
+    "httpx==0.27.2" \
+    "langgraph==0.2.50" \
+    "langchain-core==0.3.25" \
+    "anthropic==0.39.0" \
+    "openai==1.54.5" \
+    "structlog==24.4.0" \
+    "gitpython==3.1.43" \
+    "prometheus-client==0.21.0" \
+    "streamlit==1.40.2" \
+    "chromadb==0.5.23"
 
-ARG BUILD_VERSION=1.4.4
-ARG CACHE_BUST=20260523-2
 RUN echo "Cloning version ${BUILD_VERSION} (bust: ${CACHE_BUST})" && git clone --depth 1 --branch main \
     https://github.com/PhiSchBerlin/autonomous-ha-self-healing-agent.git /src \
     && cp -r /src/agent_core     ./agent_core \
@@ -42,7 +43,6 @@ RUN echo "Cloning version ${BUILD_VERSION} (bust: ${CACHE_BUST})" && git clone -
 
 RUN mkdir -p /data/chromadb /data/backups /data/logs
 
-# ONNX-Embedding-Modell beim Build cachen (79 MB) → kein Download beim ersten Start
 ENV CHROMA_CACHE_DIR=/data/chroma_cache
 RUN mkdir -p /data/chroma_cache && python - <<'EOF'
 import os, sys
