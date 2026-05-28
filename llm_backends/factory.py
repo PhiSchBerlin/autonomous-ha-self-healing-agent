@@ -40,7 +40,7 @@ def create_llm_backend(config: LLMBackendConfig) -> BaseLLMBackend:
                 temperature=config.temperature,
                 max_tokens=config.max_tokens,
                 timeout_seconds=config.timeout_seconds,
-                max_retries=config.max_retries,
+                max_retries=0,  # Fallback soll schnell scheitern, kein Retry-Loop
             )
             return FallbackOllamaBackend(primary, OllamaBackend(fallback_config))
         return primary
