@@ -52,6 +52,10 @@ class GitOpsEngine:
                 "gitpython nicht installiert. Installation: pip install gitpython"
             ) from exc
 
+        # Git's "dubious ownership"-Sicherheitscheck umgehen: Im HA-Container
+        # läuft der Prozess oft als anderer User als der Owner von /config.
+        self._configure_safe_directory()
+
         if not (self.repo_path / ".git").exists():
             logger.info("Initialisiere Git-Repo in %s", self.repo_path)
             self._repo = git.Repo.init(str(self.repo_path))
@@ -66,6 +70,21 @@ class GitOpsEngine:
             self._repo = git.Repo(str(self.repo_path))
 
         return self._repo
+
+    def _configure_safe_directory(self) -> None:
+        """Trägt repo_path in git safe.directory ein, damit Git auch bei
+        abweichendem Datei-Owner im Container nicht mit 'dubious ownership'
+        abbricht."""
+        import subprocess
+        try:
+            subprocess.run(
+                ["git", "config", "--global", "--add", "safe.directory", str(self.repo_path)],
+                check=True,
+                capture_output=True,
+            )
+            logger.debug("safe.directory gesetzt: %s", self.repo_path)
+        except Exception as exc:
+            logger.debug("safe.directory konnte nicht gesetzt werden: %s", exc)
 
     def _get_all_tracked_files(self) -> list[str]:
         """Gibt alle relevanten Dateien für Git-Tracking zurück."""
