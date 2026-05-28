@@ -138,11 +138,20 @@ class ValidationAgent(BaseAgent):
                         f"Zeile {issue.get('line', '?')}: {issue.get('message', '')}"
                     )
 
-            # Zusätzlich: pyyaml safe_load
+            # Zusätzlich: pyyaml safe_load mit HA-spezifischen Tags
             try:
                 import yaml
+
+                class _HALoader(yaml.SafeLoader):
+                    pass
+
+                for tag in ("!secret", "!include", "!include_dir_list",
+                            "!include_dir_merge_list", "!include_dir_named",
+                            "!include_dir_merge_named", "!env_var"):
+                    _HALoader.add_constructor(tag, lambda loader, node: loader.construct_scalar(node))
+
                 with open(sandbox_path) as f:
-                    yaml.safe_load(f)
+                    yaml.load(f, Loader=_HALoader)  # noqa: S506
             except Exception as exc:
                 issues.append(f"YAML-Parse-Fehler in {Path(orig_path).name}: {exc}")
 
