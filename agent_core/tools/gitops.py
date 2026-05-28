@@ -63,11 +63,29 @@ class GitOpsEngine:
                 files = self._get_all_tracked_files()
                 if files:
                     self._repo.index.add(files)
+                else:
+                    # Leeres Repo braucht mindestens eine Datei für den ersten Commit
+                    placeholder = self.repo_path / ".ha-agent-tracking"
+                    placeholder.write_text("HA Self-Healing Agent tracking\n")
+                    self._repo.index.add([".ha-agent-tracking"])
                 self._initial_commit()
             except Exception as exc:
                 logger.warning("Initialer Git-Commit fehlgeschlagen: %s", exc)
         else:
             self._repo = git.Repo(str(self.repo_path))
+            # Sicherstellen, dass HEAD existiert (Repo könnte leer sein)
+            if not self._repo.head.is_valid():
+                try:
+                    files = self._get_all_tracked_files()
+                    if files:
+                        self._repo.index.add(files)
+                    else:
+                        placeholder = self.repo_path / ".ha-agent-tracking"
+                        placeholder.write_text("HA Self-Healing Agent tracking\n")
+                        self._repo.index.add([".ha-agent-tracking"])
+                    self._initial_commit()
+                except Exception as exc:
+                    logger.warning("Initialer Git-Commit für bestehendes Repo fehlgeschlagen: %s", exc)
 
         return self._repo
 

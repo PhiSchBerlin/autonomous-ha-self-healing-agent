@@ -145,14 +145,20 @@ async def run_repair(request: RepairRequest) -> dict[str, Any]:
     }
 
 
-async def _run_repair_job(job_id: str, issues: list[dict[str, Any]], ha_config_path: str) -> None:
-    """Hintergrund-Task: repariert Issues sequenziell und aktualisiert den Job-Status."""
+_REPAIR_CONCURRENCY = 5  # gleichzeitig laufende Repair-Tasks
+
+
+async def _repair_single_issue(
+    semaphore: asyncio.Semaphore,
+    orchestrator: Any,
+    issue: dict[str, Any],
+    ha_config_path: str,
+    job: dict[str, Any],
+) -> None:
+    """Verarbeitet ein einzelnes Issue mit Semaphore-Begrenzung."""
     from agent_core.repair_store import add_action
 
-    job = _repair_jobs[job_id]
-    orchestrator = _build_llm_and_orchestrator()
-
-    for idx, issue in enumerate(issues):
+    async with semaphore:
         finding = _security_issue_to_finding(issue)
         try:
             result = await orchestrator.run_repair(
@@ -222,7 +228,22 @@ async def _run_repair_job(job_id: str, issues: list[dict[str, Any]], ha_config_p
                 "success": False,
                 "errors": [str(exc)],
             })
-        job["completed"] = idx + 1
+        job["completed"] += 1
+
+
+async def _run_repair_job(job_id: str, issues: list[dict[str, Any]], ha_config_path: str) -> None:
+    """Hintergrund-Task: repariert Issues parallel (max. _REPAIR_CONCURRENCY gleichzeitig)."""
+    job = _repair_jobs[job_id]
+    orchestrator = _build_llm_and_orchestrator()
+    semaphore = asyncio.Semaphore(_REPAIR_CONCURRENCY)
+
+    tasks = [
+        asyncio.create_task(
+            _repair_single_issue(semaphore, orchestrator, issue, ha_config_path, job)
+        )
+        for issue in issues
+    ]
+    await asyncio.gather(*tasks, return_exceptions=True)
 
     job["status"] = "done"
     job["finished_at"] = datetime.now(UTC).isoformat()
