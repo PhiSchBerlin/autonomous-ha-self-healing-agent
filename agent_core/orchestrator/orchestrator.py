@@ -41,10 +41,16 @@ class AgentOrchestrator:
         self._approval_decisions: dict[str, bool] = {}
 
     def _build_config(self, agent_type: AgentType) -> AgentRunConfig:
+        try:
+            from api.routers.agent import get_sandbox_enabled
+            dry_run = get_sandbox_enabled()
+        except Exception:
+            # Fallback: im AUTONOMOUS-Modus kein dry_run, sonst schon
+            dry_run = self.mode != AgentMode.AUTONOMOUS
         return AgentRunConfig(
             agent_type=agent_type,
             mode=self.mode,
-            dry_run=self.mode != AgentMode.AUTONOMOUS,
+            dry_run=dry_run,
         )
 
     async def run_log_analysis(self, raw_logs: list[dict[str, Any]]) -> WorkflowResult:

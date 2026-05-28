@@ -157,8 +157,11 @@ async def grep_pattern(
                 data = json.loads(line)
                 if data.get("type") == "match":
                     sub = data["data"]
+                    file_hit = sub["path"]["text"]
+                    if file_hit.endswith(".bak"):
+                        continue
                     matches.append({
-                        "file": sub["path"]["text"],
+                        "file": file_hit,
                         "line_number": sub["line_number"],
                         "line_content": sub["lines"]["text"].rstrip(),
                     })
@@ -172,6 +175,8 @@ async def grep_pattern(
     matches = []
     compiled = re.compile(pattern)
     for file_path in glob.glob(f"{directory}/{file_glob}", recursive=True):
+        if file_path.endswith(".bak"):
+            continue
         if len(matches) >= max_results:
             break
         try:
@@ -294,7 +299,7 @@ async def list_ha_files(config_path: str) -> dict[str, Any]:
     for category, globs in patterns.items():
         for g in globs:
             for f in glob.glob(str(base / g), recursive=True):
-                if f not in categories[category]:
+                if f not in categories[category] and not f.endswith(".bak"):
                     categories[category].append(f)
 
     total = sum(len(v) for v in categories.values())

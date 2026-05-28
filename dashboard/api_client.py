@@ -95,3 +95,19 @@ def fetch_latest_audit() -> dict[str, Any] | None:
 
 def fetch_metrics() -> str | None:
     return get_text("/metrics")
+
+
+def fetch_sandbox_status() -> bool:
+    """Gibt True zurück wenn der Sandbox-Modus aktiv ist."""
+    result = get_json("/api/v1/agents/sandbox")
+    if isinstance(result, dict):
+        return bool(result.get("sandbox_enabled", True))
+    return True
+
+
+def set_sandbox_status(enabled: bool) -> bool:
+    """Schaltet den Sandbox-Modus um. Gibt den neuen Wert zurück."""
+    result = post_json("/api/v1/agents/sandbox", {"sandbox_enabled": enabled})
+    if isinstance(result, dict):
+        return bool(result.get("sandbox_enabled", enabled))
+    return enabled

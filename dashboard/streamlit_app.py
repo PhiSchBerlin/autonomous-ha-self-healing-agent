@@ -26,10 +26,12 @@ from dashboard.api_client import (
     API_URL,
     EXTERNAL_API_URL,
     REFRESH_SECONDS,
+    fetch_sandbox_status,
     get_json,
     get_text,
     poll_repair_job,
     post_json,
+    set_sandbox_status,
 )
 
 st.set_page_config(
@@ -107,6 +109,33 @@ with st.sidebar:
         ],
         label_visibility="collapsed",
     )
+
+    st.divider()
+
+    # Sandbox-Toggle
+    st.subheader("Sandbox-Modus")
+    if "sandbox_enabled" not in st.session_state:
+        st.session_state["sandbox_enabled"] = fetch_sandbox_status()
+
+    def _toggle_sandbox() -> None:
+        new_val = not st.session_state["sandbox_enabled"]
+        result = set_sandbox_status(new_val)
+        st.session_state["sandbox_enabled"] = result
+
+    sandbox_on = st.session_state["sandbox_enabled"]
+    label = "🔒 Sandbox AN — nur simulieren" if sandbox_on else "⚡ Sandbox AUS — live schreiben"
+    st.toggle(
+        label,
+        value=sandbox_on,
+        key="_sandbox_toggle",
+        on_change=_toggle_sandbox,
+        help=(
+            "Sandbox AN: Reparaturen werden nur simuliert, nie auf Disk geschrieben.\n"
+            "Sandbox AUS: Validierte Reparaturen werden direkt in die HA-Konfiguration geschrieben."
+        ),
+    )
+    if not sandbox_on:
+        st.warning("Sandbox ist deaktiviert — Reparaturen werden live angewendet!")
 
     st.divider()
 

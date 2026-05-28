@@ -13,6 +13,10 @@ logger = logging.getLogger(__name__)
 # Laufende und abgeschlossene Audit-Jobs (in-memory, reicht für Single-Instance)
 _audit_jobs: dict[str, dict[str, Any]] = {}
 
+# Sandbox-Modus: True = Änderungen werden NUR simuliert, nie auf Disk geschrieben.
+# Standard: True (sicher). Kann per API-Endpunkt umgeschaltet werden.
+_sandbox_enabled: bool = True
+
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 
@@ -159,6 +163,34 @@ async def get_full_audit_status(job_id: str) -> dict[str, Any]:
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job nicht gefunden")
     return {"job_id": job_id, **job}
+
+
+@router.get("/sandbox")
+async def get_sandbox_status() -> dict[str, Any]:
+    """Gibt den aktuellen Sandbox-Status zurück."""
+    return {"sandbox_enabled": _sandbox_enabled}
+
+
+@router.post("/sandbox")
+async def set_sandbox_status(body: dict[str, Any]) -> dict[str, Any]:
+    """Schaltet den Sandbox-Modus ein oder aus.
+
+    sandbox_enabled=True  → Änderungen werden nur simuliert (sicher, Standard).
+    sandbox_enabled=False → Änderungen werden live auf Disk geschrieben.
+    """
+    global _sandbox_enabled
+    value = body.get("sandbox_enabled")
+    if not isinstance(value, bool):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="'sandbox_enabled' muss ein Boolean sein")
+    _sandbox_enabled = value
+    logger.info("Sandbox-Modus geändert: sandbox_enabled=%s", _sandbox_enabled)
+    return {"sandbox_enabled": _sandbox_enabled}
+
+
+def get_sandbox_enabled() -> bool:
+    """Wird vom Orchestrator aufgerufen um den aktuellen dry_run-Wert zu ermitteln."""
+    return _sandbox_enabled
 
 
 @router.get("/health")

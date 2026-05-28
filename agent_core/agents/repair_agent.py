@@ -540,6 +540,14 @@ class RepairAgent(BaseAgent):
 
                 current_content = file_path.read_text(encoding="utf-8")
 
+                # Backup der Originaldatei anlegen (.bak — wird vom Agenten ignoriert)
+                bak_path = file_path.with_suffix(file_path.suffix + ".bak")
+                try:
+                    bak_path.write_text(current_content, encoding="utf-8")
+                    logger.info("Backup erstellt: %s", bak_path)
+                except OSError as bak_exc:
+                    logger.warning("Backup fehlgeschlagen (nicht kritisch): %s", bak_exc)
+
                 if change.original_content in current_content:
                     new_content = current_content.replace(
                         change.original_content, change.proposed_content
