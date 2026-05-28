@@ -1,6 +1,7 @@
 """API-Router für Repair-Workflows, Approvals und GitOps."""
 
 import asyncio
+import logging
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -8,6 +9,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/repair", tags=["repair"])
 
 # In-Memory Job-Registry für Background-Repair-Jobs
@@ -235,6 +237,21 @@ async def _run_repair_job(job_id: str, issues: list[dict[str, Any]], ha_config_p
     """Hintergrund-Task: repariert Issues parallel (max. _REPAIR_CONCURRENCY gleichzeitig)."""
     job = _repair_jobs[job_id]
     orchestrator = _build_llm_and_orchestrator()
+
+    # Vorab-Check: LLM erreichbar? Falls nicht → Job sofort abbrechen statt
+    # alle Issues auf Timeout warten zu lassen.
+    try:
+        llm_available = await orchestrator.llm.health_check()
+    except Exception:
+        llm_available = False
+
+    if not llm_available:
+        logger.warning("Repair-Job %s abgebrochen: kein LLM-Backend erreichbar", job_id)
+        job["status"] = "aborted"
+        job["error"] = "Kein LLM-Backend erreichbar (weder primär noch Fallback). Job abgebrochen."
+        job["finished_at"] = datetime.now(UTC).isoformat()
+        return
+
     semaphore = asyncio.Semaphore(_REPAIR_CONCURRENCY)
 
     tasks = [
