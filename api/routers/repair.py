@@ -282,6 +282,7 @@ async def repair_issues(request: RepairIssuesRequest) -> dict[str, Any]:
         "total": len(request.issues),
         "completed": 0,
         "results": [],
+        "error": None,
         "started_at": datetime.now(UTC).isoformat(),
         "finished_at": None,
     }

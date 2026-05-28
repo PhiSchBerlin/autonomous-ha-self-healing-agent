@@ -73,7 +73,12 @@ def _show_active_repair_job() -> None:
     completed = job.get("completed", 0)
     status_txt = job.get("status", "running")
     st.progress(completed / max(total, 1), text=f"Repair-Fortschritt: {completed}/{total} Issues verarbeitet")
-    if status_txt == "done":
+    if status_txt == "aborted":
+        error_msg = job.get("error", "Unbekannter Abbruchgrund")
+        st.error(f"⛔ Repair-Job abgebrochen: {error_msg}")
+        st.session_state.pop("active_repair_job_id", None)
+        st.cache_data.clear()
+    elif status_txt == "done":
         successful = job.get("successful", 0)
         st.success(f"Reparatur abgeschlossen: {successful}/{total} erfolgreich")
         for r in job.get("results", []):
