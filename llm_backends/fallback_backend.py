@@ -129,8 +129,9 @@ class FallbackOllamaBackend(BaseLLMBackend):
                 messages, system_prompt=system_prompt, tools=tools
             )
         except Exception as exc:
-            logger.warning("Primärer LLM-Server nicht erreichbar (%s), versuche Fallback.", exc)
+            # _mark_primary_failed() loggt die Warnung selbst (nur beim ersten Ausfall)
             self._mark_primary_failed()
+            logger.debug("Primärer LLM-Server Fehlerdetail: %s", exc)
             return await self._fallback.complete(
                 messages, system_prompt=system_prompt, tools=tools
             )
@@ -167,8 +168,8 @@ class FallbackOllamaBackend(BaseLLMBackend):
             async for chunk in self._fallback.stream(messages, system_prompt=system_prompt):
                 yield chunk
         except Exception as exc:
-            logger.warning("Primärer LLM-Stream fehlgeschlagen (%s), versuche Fallback.", exc)
             self._mark_primary_failed()
+            logger.debug("Primärer LLM-Stream Fehlerdetail: %s", exc)
             async for chunk in self._fallback.stream(messages, system_prompt=system_prompt):
                 yield chunk
 

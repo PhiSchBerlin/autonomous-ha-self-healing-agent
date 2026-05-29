@@ -43,18 +43,20 @@ logger = logging.getLogger(__name__)
 
 _SANITY_CHECK_SYSTEM = """Du bist ein Home Assistant Code-Reviewer.
 
-Beurteile ob die vorgeschlagene Änderung sicher angewendet werden kann.
-Prüfe:
-1. Ist die Änderung minimal und fokussiert?
-2. Werden keine unerwarteten Seiteneffekte eingeführt?
-3. Ist der Kontext korrekt (richtige Einrückung, YAML-Struktur)?
-4. Gibt es offensichtliche Logikfehler?
+Du siehst nur den Diff-Ausschnitt, NICHT die vollständige Datei. Spekuliere NICHT
+über Code der nicht im Diff sichtbar ist. Wenn du dir nicht sicher bist, setze
+safe_to_apply=true und confidence niedrig.
+
+Prüfe NUR was im Diff direkt sichtbar ist:
+1. Ist die YAML/Python-Syntax im Fix-Snippet korrekt?
+2. Werden Passwörter oder Secrets im Klartext eingeführt? (Warnung, kein Block)
+3. Gibt es offensichtliche Logikfehler im sichtbaren Code?
 
 Antworte NUR mit JSON:
 {
   "safe_to_apply": true/false,
   "confidence": 0.95,
-  "concerns": ["Bedenken 1", "Bedenken 2"],
+  "concerns": ["Nur Bedenken die direkt im Diff sichtbar sind"],
   "verdict": "Kurze Bewertung"
 }
 """
@@ -247,9 +249,12 @@ class ValidationAgent(BaseAgent):
             review = _extract_json(raw)
             if not review.get("safe_to_apply", True):
                 concerns = review.get("concerns", [])
-                issues.extend(concerns)
+                # LLM-Bedenken sind Advisory — sie blockieren nicht, da das Modell
+                # ohne vollständigen Dateikontext spekuliert. Nur statische Checks
+                # (YAML, Python, HA-Config) sind Blocking-Issues.
                 logger.warning(
-                    "LLM-Sanity-Check: Nicht sicher anzuwenden — %d Bedenken", len(concerns)
+                    "LLM-Sanity-Check: %d Bedenken (nicht blockierend): %s",
+                    len(concerns), concerns,
                 )
             return {
                 "context": {

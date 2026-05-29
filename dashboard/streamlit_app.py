@@ -1073,6 +1073,8 @@ _PAGES = {
 
 _PAGES[page]()
 
-# Auto-Refresh: schneller wenn ein Repair-Job läuft
+# Auto-Refresh: schneller wenn ein Repair-Job läuft, aber mit Mindest-Pause
 if st.session_state.get("active_repair_job_id"):
+    import time
+    time.sleep(REFRESH_SECONDS)
     st.rerun()

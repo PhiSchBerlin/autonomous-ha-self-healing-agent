@@ -36,10 +36,10 @@ apparmor: true
 options:
   agent_mode: "advisory"
   llm_backend_type: "ollama"
-  llm_model: "qwen2.5-coder:32b"
+  llm_model: "qwen2.5-coder:14b"
   llm_base_url: "http://192.168.178.200:11434"
-  llm_fallback_base_url: "http://192.168.178.32:11434"
-  llm_fallback_model: "deepseek-r1:7b"
+  llm_fallback_base_url: "http://192.168.178.161:11434"
+  llm_fallback_model: "qwen2.5-coder:3b"
   llm_cloud_enabled: false
   llm_anonymize_sensitive_data: true
   log_level: "INFO"
