@@ -3,7 +3,7 @@ description: >
   Autonomous AI agent for self-healing and security monitoring of Home Assistant.
   Analyzes logs, detects configuration errors and suggests repairs -
   always with human control.
-version: "1.6.3"
+version: "1.6.4"
 slug: ha_self_healing_agent
 url: "https://github.com/PhiSchBerlin/autonomous-ha-self-healing-agent"
 arch:
@@ -39,7 +39,7 @@ options:
   llm_model: "qwen2.5-coder:14b"
   llm_base_url: "http://192.168.178.200:11434"
   llm_fallback_base_url: "http://192.168.178.161:11434"
-  llm_fallback_model: "qwen2.5-coder:3b"
+  llm_fallback_model: "qwen2.5-coder:7b"
   llm_cloud_enabled: false
   llm_anonymize_sensitive_data: true
   log_level: "INFO"

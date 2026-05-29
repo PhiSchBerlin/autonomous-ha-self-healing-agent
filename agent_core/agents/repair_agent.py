@@ -55,10 +55,14 @@ Regeln:
 - Generiere valides YAML oder Python
 - Kein Einführen neuer Abhängigkeiten ohne Begründung
 
-KRITISCH für original_snippet:
+KRITISCH für original_snippet (change_type=modify):
 - Kopiere den zu ersetzenden Text WORTGETREU aus dem gezeigten Dateiinhalt
 - Kein Zeichen hinzufügen, weglassen oder verändern — exakte Kopie
 - Wenn die Zielzeile nicht im gezeigten Ausschnitt sichtbar ist, gib changes=[] zurück
+
+Bei change_type=create:
+- original_snippet muss "" (leer) sein
+- fixed_snippet enthält den vollständigen Inhalt der neuen Datei
 
 Antworte NUR mit gültigem JSON:
 {
@@ -541,6 +545,31 @@ class RepairAgent(BaseAgent):
         for change in repair.changes:
             file_path = Path(change.file_path)
             try:
+                if change.change_type == "create":
+                    # Neue Datei anlegen — Verzeichnis ggf. miterstellen
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    file_path.write_text(change.proposed_content, encoding="utf-8")
+                    applied_files.append(change.file_path)
+                    logger.info("Datei erstellt: %s", change.file_path)
+                    continue
+
+                if change.change_type == "delete":
+                    if file_path.exists():
+                        bak_path = file_path.with_suffix(file_path.suffix + ".bak")
+                        try:
+                            bak_path.write_text(
+                                file_path.read_text(encoding="utf-8"), encoding="utf-8"
+                            )
+                        except OSError:
+                            pass
+                        file_path.unlink()
+                        applied_files.append(change.file_path)
+                        logger.info("Datei gelöscht: %s", change.file_path)
+                    else:
+                        logger.warning("Löschen übersprungen — Datei nicht vorhanden: %s", change.file_path)
+                    continue
+
+                # change_type == "modify" (default)
                 if not file_path.exists():
                     apply_errors.append(f"Datei nicht gefunden: {change.file_path}")
                     continue
