@@ -49,12 +49,33 @@ class SandboxManager:
         self._tmpdir = tempfile.mkdtemp(prefix="ha_agent_sandbox_")
         for change in self._changes:
             orig_path = change.get("file_path", "")
-            content = change.get("proposed_content", "")
+            proposed = change.get("proposed_content", "")
+            original = change.get("original_content", "")
             if not orig_path:
                 continue
+
+            # Vollständigen Dateiinhalt aufbauen: Snippet in Originaldatei einsetzen.
+            # Nur wenn original_content bekannt und in der echten Datei vorhanden ist,
+            # wenden wir den Patch an — sonst schreiben wir proposed_content direkt
+            # (Fallback für neue Dateien oder change_type=create).
+            full_content = proposed
+            real_path = Path(orig_path)
+            if original and real_path.exists():
+                try:
+                    disk_content = real_path.read_text(encoding="utf-8")
+                    if original in disk_content:
+                        full_content = disk_content.replace(original, proposed, 1)
+                    else:
+                        logger.debug(
+                            "Sandbox: original_snippet nicht in %s gefunden — schreibe proposed direkt",
+                            orig_path,
+                        )
+                except OSError:
+                    pass
+
             fname = Path(orig_path).name
             sandbox_path = Path(self._tmpdir) / fname
-            sandbox_path.write_text(content, encoding="utf-8")
+            sandbox_path.write_text(full_content, encoding="utf-8")
             self._file_map[orig_path] = str(sandbox_path)
         logger.debug("Sandbox erstellt: %s (%d Dateien)", self._tmpdir, len(self._file_map))
         return self
@@ -113,14 +134,21 @@ class SandboxManager:
         """Erstellt SandboxManager aus einem RepairAction-Objekt oder -Dict."""
         if isinstance(repair_action, dict):
             changes = repair_action.get("changes", [])
-            # Dict-Format aus repair_agent: file_path + proposed_content
             normalized = [
-                {"file_path": c.get("file_path", ""), "proposed_content": c.get("proposed_content", c.get("fixed_snippet", ""))}
+                {
+                    "file_path": c.get("file_path", ""),
+                    "original_content": c.get("original_content", c.get("original_snippet", "")),
+                    "proposed_content": c.get("proposed_content", c.get("fixed_snippet", "")),
+                }
                 for c in changes
             ]
         else:
             normalized = [
-                {"file_path": c.file_path, "proposed_content": c.proposed_content}
+                {
+                    "file_path": c.file_path,
+                    "original_content": c.original_content,
+                    "proposed_content": c.proposed_content,
+                }
                 for c in getattr(repair_action, "changes", [])
             ]
         return cls(normalized)

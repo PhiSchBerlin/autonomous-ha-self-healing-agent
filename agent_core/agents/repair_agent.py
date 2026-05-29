@@ -51,10 +51,14 @@ Erstelle einen präzisen Patch für das beschriebene Problem.
 
 Regeln:
 - Ändere NUR was notwendig ist
-- Erkläre JEDEN Schritt
 - Berücksichtige HA-Best-Practices (async, ConfigEntry, !secret für Credentials)
 - Generiere valides YAML oder Python
 - Kein Einführen neuer Abhängigkeiten ohne Begründung
+
+KRITISCH für original_snippet:
+- Kopiere den zu ersetzenden Text WORTGETREU aus dem gezeigten Dateiinhalt
+- Kein Zeichen hinzufügen, weglassen oder verändern — exakte Kopie
+- Wenn die Zielzeile nicht im gezeigten Ausschnitt sichtbar ist, gib changes=[] zurück
 
 Antworte NUR mit gültigem JSON:
 {
@@ -64,7 +68,7 @@ Antworte NUR mit gültigem JSON:
     {
       "file_path": "/config/configuration.yaml",
       "change_description": "Was geändert wird",
-      "original_snippet": "alter YAML-Block (exakt)",
+      "original_snippet": "EXAKT so wie im Dateiinhalt oben — zeichengenaue Kopie",
       "fixed_snippet": "neuer YAML-Block",
       "change_type": "modify"
     }
@@ -221,7 +225,7 @@ class RepairAgent(BaseAgent):
         )
 
         files_desc = "\n\n".join(
-            f"### {fp}\n```\n{content[:500]}\n```"
+            f"### {fp}\n```\n{content[:2000]}\n```"
             for fp, content in list(file_contents.items())[:2]
         )
 

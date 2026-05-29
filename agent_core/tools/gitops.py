@@ -214,8 +214,10 @@ class GitOpsEngine:
             # Dateien aus Tag-Stand wiederherstellen (ohne History zu ändern)
             repo.git.checkout(str(target_commit.hexsha), "--", ".")
 
-            # Rollback als neuen Commit erfassen
-            repo.index.add(self._get_all_tracked_files())
+            # Rollback als neuen Commit erfassen — nur existierende Dateien stagen
+            existing_files = [f for f in self._get_all_tracked_files() if (self.repo_path / f).exists()]
+            if existing_files:
+                repo.index.add(existing_files)
             rollback_msg = (
                 f"revert: rollback to backup '{tag_name}'\n\n"
                 f"Rolled back to commit {target_commit.hexsha[:8]} "
@@ -239,7 +241,9 @@ class GitOpsEngine:
         repo = self._get_repo()
         try:
             repo.git.checkout(commit_hash, "--", ".")
-            repo.index.add(self._get_all_tracked_files())
+            existing_files = [f for f in self._get_all_tracked_files() if (self.repo_path / f).exists()]
+            if existing_files:
+                repo.index.add(existing_files)
             repo.index.commit(
                 f"revert: rollback to commit {commit_hash[:8]}",
                 author=git.Actor(self.COMMIT_AUTHOR_NAME, self.COMMIT_AUTHOR_EMAIL),
