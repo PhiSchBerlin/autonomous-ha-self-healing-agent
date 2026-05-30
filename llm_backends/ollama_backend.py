@@ -79,6 +79,12 @@ class OllamaBackend(BaseLLMBackend):
         for attempt in range(self.config.max_retries + 1):
             try:
                 response = await client.post("/api/chat", json=payload)
+                if response.status_code == 404:
+                    raise RuntimeError(
+                        f"Ollama backend failed after {attempt + 1} attempts: "
+                        f"Modell '{self.config.model}' nicht auf Server {self._base_url} gefunden — "
+                        f"bitte 'ollama pull {self.config.model}' auf dem Server ausführen."
+                    )
                 if response.status_code == 429:
                     retry_after = float(response.headers.get("Retry-After", 2 ** attempt))
                     await asyncio.sleep(retry_after)

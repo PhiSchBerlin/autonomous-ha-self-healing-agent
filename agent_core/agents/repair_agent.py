@@ -255,10 +255,35 @@ class RepairAgent(BaseAgent):
         for change in patch_data.get("changes", []):
             original = change.get("original_snippet", "")
             fixed = change.get("fixed_snippet", "")
-            diff = _generate_simple_diff(original, fixed, change.get("file_path", ""))
+            fp = change.get("file_path", "")
+
+            # YAML-Snippets vorab validieren — ungültige Snippets sofort verwerfen
+            # damit die Sandbox-Validierung nicht mit einem unmöglich zu reparierenden
+            # Patch-Fragment beschäftigt wird.
+            if fp.endswith((".yaml", ".yml")) and fixed:
+                try:
+                    import yaml as _yaml
+
+                    class _HALoader(_yaml.SafeLoader):
+                        pass
+
+                    for _tag in ("!secret", "!include", "!include_dir_list",
+                                 "!include_dir_merge_list", "!include_dir_named",
+                                 "!include_dir_merge_named", "!env_var"):
+                        _HALoader.add_constructor(_tag, lambda loader, node: loader.construct_scalar(node))
+
+                    _yaml.load(fixed, Loader=_HALoader)  # noqa: S506
+                except _yaml.YAMLError as yaml_exc:
+                    logger.warning(
+                        "Patch-Snippet für %s ist kein valides YAML — überspringe Change: %s",
+                        fp, yaml_exc,
+                    )
+                    continue
+
+            diff = _generate_simple_diff(original, fixed, fp)
             changes.append(
                 FileChange(
-                    file_path=change.get("file_path", ""),
+                    file_path=fp,
                     original_content=original,
                     proposed_content=fixed,
                     diff=diff,
