@@ -91,6 +91,8 @@ class BaseAgent(ABC):
             tool_calls=len(final_state.tool_calls),
             errors=final_state.errors,
             audit_trail=[r.id for r in final_state.audit_records],
+            findings=final_state.findings,
+            security_issues=final_state.security_issues,
             repair_actions=final_state.repair_actions,
         )
 

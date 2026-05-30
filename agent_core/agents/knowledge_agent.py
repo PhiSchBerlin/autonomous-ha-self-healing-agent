@@ -171,9 +171,23 @@ class KnowledgeAgent(BaseAgent):
         return {}
 
     async def _node_ingest_findings(self, state: AgentState) -> dict[str, Any]:
-        """Speichert alle Findings des aktuellen Runs im Vector-Store."""
+        """Speichert alle Findings des aktuellen Runs im Vector-Store.
+
+        Liest Findings aus state.findings (direkter Workflow) und zusätzlich
+        aus context["ingest_findings"] (übergeben vom Orchestrator nach Full Audit).
+        """
+        from models.log_models import Finding
+
+        # Findings aus State + aus Context zusammenführen
+        all_findings: list[Any] = list(state.findings)
+        for raw in state.context.get("ingest_findings", []):
+            try:
+                all_findings.append(Finding(**raw) if isinstance(raw, dict) else raw)
+            except Exception:
+                pass
+
         stored = 0
-        for finding in state.findings:
+        for finding in all_findings:
             try:
                 self._vector_store.store_finding(
                     title=finding.title,
@@ -197,16 +211,29 @@ class KnowledgeAgent(BaseAgent):
         return {}
 
     async def _node_ingest_repairs(self, state: AgentState) -> dict[str, Any]:
-        """Speichert alle RepairActions des aktuellen Runs."""
+        """Speichert alle RepairActions des aktuellen Runs.
+
+        Liest aus state.repair_actions (direkter Workflow) und zusätzlich
+        aus context["ingest_repairs"] (übergeben vom Orchestrator nach Full Audit).
+        """
+        from models.repair_models import RepairAction
+
+        all_repairs: list[Any] = list(state.repair_actions)
+        for raw in state.context.get("ingest_repairs", []):
+            try:
+                all_repairs.append(RepairAction(**raw) if isinstance(raw, dict) else raw)
+            except Exception:
+                pass
+
         stored = 0
-        for repair in state.repair_actions:
+        for repair in all_repairs:
             try:
                 self._vector_store.store_repair(
                     title=repair.title,
                     rationale=repair.rationale,
                     finding_title=repair.title,
                     success=str(repair.status) in ("applied", "monitored"),
-                    risk_level=repair.risk_level,
+                    risk_level=str(repair.risk_level),
                     repair_id=str(repair.id),
                     file_paths=[c.file_path for c in repair.changes],
                 )

@@ -107,6 +107,8 @@ class AgentOrchestrator:
         self,
         state_with_findings: Any | None = None,
         query: str | None = None,
+        ingest_findings: list[Any] | None = None,
+        ingest_repairs: list[Any] | None = None,
     ) -> WorkflowResult:
         """Startet den Knowledge-Agent Workflow (Speichern + Kontext-Anreicherung)."""
         from agent_core.agents.knowledge_agent import KnowledgeAgent
@@ -120,6 +122,10 @@ class AgentOrchestrator:
         context: dict[str, Any] = {}
         if query:
             context["query"] = query
+        if ingest_findings:
+            context["ingest_findings"] = ingest_findings
+        if ingest_repairs:
+            context["ingest_repairs"] = ingest_repairs
         return await agent.run(context=context)
 
     def get_knowledge_agent(self) -> Any:
@@ -189,10 +195,47 @@ class AgentOrchestrator:
                 else:
                     results[key] = result  # type: ignore[assignment]
 
-        # Knowledge Agent: Findings aus allen Ergebnissen speichern
+        # Knowledge Agent: Findings und Repairs aus allen Ergebnissen sammeln und speichern
         if use_knowledge and results:
             try:
-                knowledge_result = await self.run_knowledge()
+                all_findings = []
+                all_repairs = []
+                for result in results.values():
+                    for finding in getattr(result, "findings", []):
+                        try:
+                            all_findings.append(
+                                finding.model_dump(mode="json")
+                                if hasattr(finding, "model_dump") else finding
+                            )
+                        except Exception:
+                            pass
+                    for issue in getattr(result, "security_issues", []):
+                        try:
+                            # SecurityIssue → Finding-kompatibles Dict
+                            all_findings.append({
+                                "title": issue.title,
+                                "description": issue.description,
+                                "severity": str(issue.severity),
+                                "category": "security",
+                                "source_agent": "security_scanner",
+                                "confidence": min(1.0, max(0.0, issue.risk_score / 10.0)),
+                                "affected_files": [issue.file_path] if issue.file_path else [],
+                                "risk_score": issue.risk_score,
+                            })
+                        except Exception:
+                            pass
+                    for repair in getattr(result, "repair_actions", []):
+                        try:
+                            all_repairs.append(
+                                repair.model_dump(mode="json")
+                                if hasattr(repair, "model_dump") else repair
+                            )
+                        except Exception:
+                            pass
+                knowledge_result = await self.run_knowledge(
+                    ingest_findings=all_findings,
+                    ingest_repairs=all_repairs,
+                )
                 results["knowledge"] = knowledge_result
             except Exception as exc:
                 logger.warning("Knowledge-Agent fehlgeschlagen (nicht kritisch): %s", exc)
