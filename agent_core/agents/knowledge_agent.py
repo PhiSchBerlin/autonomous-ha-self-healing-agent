@@ -205,7 +205,7 @@ class KnowledgeAgent(BaseAgent):
                     title=repair.title,
                     rationale=repair.rationale,
                     finding_title=repair.title,
-                    success=repair.status.value in ("applied", "monitored"),
+                    success=str(repair.status) in ("applied", "monitored"),
                     risk_level=repair.risk_level,
                     repair_id=str(repair.id),
                     file_paths=[c.file_path for c in repair.changes],
