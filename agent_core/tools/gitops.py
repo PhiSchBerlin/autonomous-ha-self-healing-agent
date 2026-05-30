@@ -211,13 +211,25 @@ class GitOpsEngine:
             tag_ref = repo.tags[tag_name]
             target_commit = tag_ref.commit
 
-            # Dateien aus Tag-Stand wiederherstellen (ohne History zu ändern)
-            repo.git.checkout(str(target_commit.hexsha), "--", ".")
+            # Nur Dateien zurücksetzen die im Tag-Commit tatsächlich existieren —
+            # kein "." checkout, der auch gelöschte/umbenannte Dateien anfassen würde.
+            restored: list[str] = []
+            for blob in target_commit.tree.traverse():
+                if blob.type != "blob":
+                    continue
+                rel = blob.path
+                try:
+                    repo.git.checkout(str(target_commit.hexsha), "--", rel)
+                    restored.append(rel)
+                except Exception as file_exc:
+                    logger.warning("Rollback: Datei '%s' konnte nicht wiederhergestellt werden: %s", rel, file_exc)
 
-            # Rollback als neuen Commit erfassen — nur existierende Dateien stagen
-            existing_files = [f for f in self._get_all_tracked_files() if (self.repo_path / f).exists()]
-            if existing_files:
-                repo.index.add(existing_files)
+            if restored:
+                repo.index.add(restored)
+            else:
+                logger.warning("Rollback: Keine Dateien wiederhergestellt für Tag '%s'", tag_name)
+                return False
+
             rollback_msg = (
                 f"revert: rollback to backup '{tag_name}'\n\n"
                 f"Rolled back to commit {target_commit.hexsha[:8]} "
@@ -228,7 +240,7 @@ class GitOpsEngine:
                 author=git.Actor(self.COMMIT_AUTHOR_NAME, self.COMMIT_AUTHOR_EMAIL),
                 committer=git.Actor(self.COMMIT_AUTHOR_NAME, self.COMMIT_AUTHOR_EMAIL),
             )
-            logger.info("Rollback auf Tag '%s' erfolgreich", tag_name)
+            logger.info("Rollback auf Tag '%s' erfolgreich (%d Dateien)", tag_name, len(restored))
             return True
         except Exception as exc:
             logger.error("Rollback auf '%s' fehlgeschlagen: %s", tag_name, exc)
@@ -240,10 +252,18 @@ class GitOpsEngine:
 
         repo = self._get_repo()
         try:
-            repo.git.checkout(commit_hash, "--", ".")
-            existing_files = [f for f in self._get_all_tracked_files() if (self.repo_path / f).exists()]
-            if existing_files:
-                repo.index.add(existing_files)
+            target_commit = repo.commit(commit_hash)
+            restored: list[str] = []
+            for blob in target_commit.tree.traverse():
+                if blob.type != "blob":
+                    continue
+                try:
+                    repo.git.checkout(commit_hash, "--", blob.path)
+                    restored.append(blob.path)
+                except Exception as file_exc:
+                    logger.warning("Rollback: Datei '%s' übersprungen: %s", blob.path, file_exc)
+            if restored:
+                repo.index.add(restored)
             repo.index.commit(
                 f"revert: rollback to commit {commit_hash[:8]}",
                 author=git.Actor(self.COMMIT_AUTHOR_NAME, self.COMMIT_AUTHOR_EMAIL),
