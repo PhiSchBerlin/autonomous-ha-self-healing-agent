@@ -151,7 +151,7 @@ class KnowledgeAgent(BaseAgent):
     async def _node_seed_knowledge(self, state: AgentState) -> dict[str, Any]:
         """Füllt die Wissensbasis beim ersten Start mit HA-Best-Practices."""
         if self._knowledge_seeded:
-            return {}
+            return {"iteration": state.iteration}
 
         try:
             stats = self._vector_store.get_stats()
@@ -168,7 +168,7 @@ class KnowledgeAgent(BaseAgent):
         except Exception as exc:
             logger.warning("Wissens-Seed fehlgeschlagen (ChromaDB nicht verfügbar?): %s", exc)
 
-        return {}
+        return {"iteration": state.iteration}
 
     async def _node_ingest_findings(self, state: AgentState) -> dict[str, Any]:
         """Speichert alle Findings des aktuellen Runs im Vector-Store.
@@ -208,7 +208,7 @@ class KnowledgeAgent(BaseAgent):
 
         if stored:
             logger.info("Knowledge Agent: %d Findings gespeichert", stored)
-        return {}
+        return {"iteration": state.iteration}
 
     async def _node_ingest_repairs(self, state: AgentState) -> dict[str, Any]:
         """Speichert alle RepairActions des aktuellen Runs.
@@ -243,7 +243,7 @@ class KnowledgeAgent(BaseAgent):
 
         if stored:
             logger.info("Knowledge Agent: %d Reparaturen gespeichert", stored)
-        return {}
+        return {"iteration": state.iteration}
 
     async def _node_enrich_context(self, state: AgentState) -> dict[str, Any]:
         """

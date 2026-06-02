@@ -740,9 +740,10 @@ def page_repair_history() -> None:
             # Alternativen
             alternatives = action.get("alternatives", [])
             if alternatives:
-                with st.expander("💡 Vom Agent verworfene Alternativen"):
-                    for alt in alternatives:
-                        st.markdown(f"- {alt}")
+                st.divider()
+                st.write("**💡 Vom Agent verworfene Alternativen**")
+                for alt in alternatives:
+                    st.markdown(f"- {alt}")
 
             # Sandbox-Validierungsergebnis
             val = action.get("validation_result") or {}
@@ -751,16 +752,17 @@ def page_repair_history() -> None:
                 sb_passed = sandbox_report.get("passed", True)
                 sb_issues = sandbox_report.get("issues", [])
                 sb_icon = "✅" if sb_passed else "❌"
-                with st.expander(f"{sb_icon} Sandbox-Validierung — {'bestanden' if sb_passed else f'{len(sb_issues)} Problem(e)'}"):
-                    if sb_issues:
-                        for issue in sb_issues:
-                            st.warning(issue)
-                    else:
-                        st.success("YAML-Lint, Python-Syntax, Jinja2-Templates: alles in Ordnung")
-                    llm_sanity_verdict = sandbox_report.get("llm_verdict")
-                    if llm_sanity_verdict:
-                        conf = sandbox_report.get("llm_confidence", 0.0)
-                        st.write(f"**LLM-Sanity-Check:** {llm_sanity_verdict} (Confidence: {conf:.0%})")
+                st.divider()
+                st.write(f"**{sb_icon} Sandbox-Validierung — {'bestanden' if sb_passed else f'{len(sb_issues)} Problem(e)'}**")
+                if sb_issues:
+                    for issue in sb_issues:
+                        st.warning(issue)
+                else:
+                    st.success("YAML-Lint, Python-Syntax, Jinja2-Templates: alles in Ordnung")
+                llm_sanity_verdict = sandbox_report.get("llm_verdict")
+                if llm_sanity_verdict:
+                    conf = sandbox_report.get("llm_confidence", 0.0)
+                    st.write(f"**LLM-Sanity-Check:** {llm_sanity_verdict} (Confidence: {conf:.0%})")
 
             # Dry-Run-Hinweis
             app_result = action.get("application_result") or {}
@@ -772,36 +774,39 @@ def page_repair_history() -> None:
             # LLM-Patch-Review
             llm_review = val.get("llm_review") or {}
             if llm_review:
-                with st.expander("🔍 LLM-Patch-Review"):
-                    approved = llm_review.get("approved")
-                    if approved is not None:
-                        st.write(f"**Bewertet:** {'✅ Gut' if approved else '⚠️ Bedenken'}")
-                    if llm_review.get("concerns"):
-                        st.write("**Bedenken:**")
-                        for concern in llm_review["concerns"]:
-                            st.markdown(f"- {concern}")
-                    if llm_review.get("suggestions"):
-                        st.write("**Verbesserungsvorschläge:**")
-                        for s in llm_review["suggestions"]:
-                            st.markdown(f"- {s}")
+                st.divider()
+                st.write("**🔍 LLM-Patch-Review**")
+                approved = llm_review.get("approved")
+                if approved is not None:
+                    st.write(f"**Bewertet:** {'✅ Gut' if approved else '⚠️ Bedenken'}")
+                if llm_review.get("concerns"):
+                    st.write("**Bedenken:**")
+                    for concern in llm_review["concerns"]:
+                        st.markdown(f"- {concern}")
+                if llm_review.get("suggestions"):
+                    st.write("**Verbesserungsvorschläge:**")
+                    for s in llm_review["suggestions"]:
+                        st.markdown(f"- {s}")
 
             # Änderungs-Diffs
             changes = action.get("changes", [])
             if changes:
-                with st.expander(f"📝 Codeänderungen ({len(changes)} Datei(en))"):
-                    for ch in changes:
-                        st.caption(f"`{ch.get('file_path', '')}` — {ch.get('change_type', 'modify')}")
-                        if ch.get("diff"):
-                            st.code(ch["diff"], language="diff")
+                st.divider()
+                st.write(f"**📝 Codeänderungen ({len(changes)} Datei(en))**")
+                for ch in changes:
+                    st.caption(f"`{ch.get('file_path', '')}` — {ch.get('change_type', 'modify')}")
+                    if ch.get("diff"):
+                        st.code(ch["diff"], language="diff")
 
             errs = action.get("errors", [])
             if errs:
                 st.error(f"Fehler: {'; '.join(errs)}")
 
             if action.get("audit_trail"):
-                with st.expander(f"Audit-Trail ({len(action['audit_trail'])} Einträge)"):
-                    for entry in action["audit_trail"]:
-                        st.code(str(entry))
+                st.divider()
+                st.write(f"**Audit-Trail ({len(action['audit_trail'])} Einträge)**")
+                for entry in action["audit_trail"]:
+                    st.code(str(entry))
 
             # Rollback-Option für angewendete Reparaturen
             if status_val == "applied" and action.get("git_commit_hash"):

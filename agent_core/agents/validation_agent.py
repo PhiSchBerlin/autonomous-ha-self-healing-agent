@@ -226,7 +226,7 @@ class ValidationAgent(BaseAgent):
         """LLM-basierter Sanity-Check: Beurteilt ob die Änderung sicher anzuwenden ist."""
         repair_data = state.context.get("repair_obj", {})
         if not repair_data:
-            return {}
+            return {"iteration": state.iteration}
 
         changes_summary = "\n".join(
             f"- {c.get('file_path', '')}: {c.get('change_type', 'modify')}\n"

@@ -159,7 +159,7 @@ class LogAnalysisAgent(BaseAgent):
         entries = state.log_entries
         if not entries:
             logger.info("Keine Log-Einträge zum Klassifizieren")
-            return {}
+            return {"iteration": state.iteration}
 
         # Nur Fehler und Warnungen ans LLM schicken (Kontextlimit schonen)
         error_entries = [e for e in entries if e.level in ("ERROR", "CRITICAL", "WARNING")]
@@ -185,7 +185,7 @@ class LogAnalysisAgent(BaseAgent):
     async def _node_correlate(self, state: AgentState) -> dict[str, Any]:
         """Korreliert gefundene Probleme und erkennt Kausalketten."""
         if len(state.findings) < 2:
-            return {}
+            return {"iteration": state.iteration}
 
         findings_text = "\n".join(
             f"- [{f.severity}] {f.title}: {f.description} "
@@ -209,7 +209,7 @@ class LogAnalysisAgent(BaseAgent):
                 }
             }
         except (json.JSONDecodeError, ValueError):
-            return {}
+            return {"iteration": state.iteration}
 
     async def _node_pattern_detection(self, state: AgentState) -> dict[str, Any]:
         """Erkennt statistische Muster ohne LLM (schnell, deterministisch)."""

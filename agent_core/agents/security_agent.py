@@ -179,7 +179,7 @@ class SecurityAgent(BaseAgent):
         # Repräsentativen Ausschnitt für LLM-Analyse laden
         sample_content = await self._build_analysis_sample(config_path)
         if not sample_content:
-            return {}
+            return {"iteration": state.iteration}
 
         prompt = (
             f"Analysiere diese Home Assistant Konfiguration auf Sicherheitsrisiken:\n\n"

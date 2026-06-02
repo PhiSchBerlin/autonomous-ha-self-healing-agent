@@ -272,7 +272,7 @@ class ConfigAnalysisAgent(BaseAgent):
         """LLM analysiert Automatisierungs-YAML auf Logikfehler."""
         automation_files = state.context.get("discovered_files", {}).get("automations", [])
         if not automation_files:
-            return {}
+            return {"iteration": state.iteration}
 
         new_findings: list[Finding] = list(state.findings)
 
@@ -346,7 +346,7 @@ class ConfigAnalysisAgent(BaseAgent):
         component_files = state.context.get("discovered_files", {}).get("custom_components", [])
         python_files = [f for f in component_files if f.endswith(".py")]
         if not python_files:
-            return {}
+            return {"iteration": state.iteration}
 
         new_findings: list[Finding] = list(state.findings)
 

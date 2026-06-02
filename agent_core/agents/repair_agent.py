@@ -45,6 +45,25 @@ from .log_analysis_agent import _extract_json
 
 logger = logging.getLogger(__name__)
 
+# Dateien, die niemals vom Agenten modifiziert, gelöscht oder als .bak gesichert werden dürfen.
+# Jede Änderung an diesen Dateien könnte HA oder den Supervisor beschädigen.
+_PROTECTED_FILES: frozenset[str] = frozenset({
+    "secrets.yaml",
+    "secrets.yml",
+    ".storage",
+    "auth",
+    "auth_provider.homeassistant",
+    "core.config",
+    "core.entity_registry",
+    "core.device_registry",
+})
+
+def _is_protected_path(file_path: str) -> bool:
+    """Gibt True zurück wenn die Datei auf der Blacklist steht."""
+    name = Path(file_path).name
+    return name in _PROTECTED_FILES or any(part in _PROTECTED_FILES for part in Path(file_path).parts)
+
+
 _GENERATE_PATCH_SYSTEM = """Du bist ein Home Assistant Konfigurationsexperte.
 
 Erstelle einen präzisen Patch für das beschriebene Problem.
@@ -257,6 +276,11 @@ class RepairAgent(BaseAgent):
             fixed = change.get("fixed_snippet", "")
             fp = change.get("file_path", "")
 
+            # Geschützte Dateien niemals anfassen
+            if _is_protected_path(fp):
+                logger.warning("Patch für geschützte Datei '%s' verworfen (Blacklist)", fp)
+                continue
+
             # YAML-Snippets vorab validieren — ungültige Snippets sofort verwerfen
             # damit die Sandbox-Validierung nicht mit einem unmöglich zu reparierenden
             # Patch-Fragment beschäftigt wird.
@@ -319,7 +343,7 @@ class RepairAgent(BaseAgent):
         """Simuliert die Änderung (Dry-Run): wendet sie temporär an und prüft."""
         repair = self._get_current_repair(state)
         if not repair:
-            return {}
+            return {"iteration": state.iteration}
 
         # Simulation: Inhalt zusammensetzen ohne Datei zu schreiben
         simulation_results: dict[str, Any] = {"dry_run": True, "changes_preview": []}
@@ -357,7 +381,7 @@ class RepairAgent(BaseAgent):
         """Validiert den Patch via ValidationAgent (Sandbox) + LLM-Review."""
         repair = self._get_current_repair(state)
         if not repair:
-            return {}
+            return {"iteration": state.iteration}
 
         # Vollständige Sandbox-Validierung via ValidationAgent
         sandbox_report: dict[str, Any] = {}
@@ -460,12 +484,12 @@ class RepairAgent(BaseAgent):
         """
         repair = self._get_current_repair(state)
         if not repair:
-            return {}
+            return {"iteration": state.iteration}
 
         if state.mode == AgentMode.ADVISORY:
             # Nur empfehlen, nichts anwenden
             logger.info("Advisory-Modus: Repair '%s' vorgeschlagen (nicht angewendet)", repair.title)
-            return {}
+            return {"iteration": state.iteration}
 
         if state.mode == AgentMode.AUTONOMOUS:
             repair.status = RepairStatus.APPROVED
@@ -502,7 +526,7 @@ class RepairAgent(BaseAgent):
         """Erstellt Git-Backup-Tag vor der Anwendung."""
         repair = self._get_current_repair(state)
         if not repair:
-            return {}
+            return {"iteration": state.iteration}
 
         config_path = state.context.get("ha_config_path", "/config")
         gitops = GitOpsEngine(config_path)
@@ -524,7 +548,7 @@ class RepairAgent(BaseAgent):
 
         repair = self._get_current_repair(state)
         if not repair or state.context.get("ha_config_path") is None:
-            return {}
+            return {"iteration": state.iteration}
 
         # Sandbox-Durchsetzung: dry_run und Security-Setting prüfen
         settings = get_settings()
@@ -568,6 +592,12 @@ class RepairAgent(BaseAgent):
         apply_errors: list[str] = []
 
         for change in repair.changes:
+            if _is_protected_path(change.file_path):
+                logger.error(
+                    "SICHERHEIT: Schreibversuch auf geschützte Datei '%s' blockiert", change.file_path
+                )
+                apply_errors.append(f"Geschützte Datei nicht änderbar: {change.file_path}")
+                continue
             file_path = Path(change.file_path)
             try:
                 if change.change_type == "create":

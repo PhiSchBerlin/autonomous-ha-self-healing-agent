@@ -77,10 +77,9 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str, FindingSeverity]] = [
 # ---------------------------------------------------------------------------
 
 _YAML_INJECTION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    # Python-Object-Tags (YAML Deserialization)
+    # Python-Object-Tags (YAML Deserialization) — echtes RCE-Risiko
     (re.compile(r"!!python/(object|module|name):"), "YAML Python-Object-Tag (Deserialization RCE)"),
-    # Merge-Keys mit externen Referenzen
-    (re.compile(r"<<:\s*\*[A-Za-z]"), "YAML Merge-Key (mögliche Referenz-Injection)"),
+    # YAML Merge-Keys (<<: *anchor) sind in ESPHome/HA-Config normale Syntax — kein Finding
 ]
 
 # ---------------------------------------------------------------------------
