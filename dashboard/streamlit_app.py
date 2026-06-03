@@ -558,7 +558,20 @@ def page_approvals() -> None:
         st.success("✅ Keine ausstehenden Reparatur-Genehmigungen")
         return
 
-    st.caption(f"{len(pending)} ausstehende Reparatur(en)")
+    col_count, col_discard = st.columns([3, 1])
+    with col_count:
+        st.caption(f"{len(pending)} ausstehende Reparatur(en)")
+    with col_discard:
+        if st.button("🗑️ Alle verwerfen", key="discard_all_pending", type="secondary"):
+            import httpx as _httpx
+            try:
+                resp = _httpx.delete(f"{API_URL}/api/v1/repair/pending/all", timeout=10.0)
+                if resp.status_code == 200:
+                    st.success(f"{resp.json().get('discarded', 0)} Einträge verworfen")
+                    st.cache_data.clear()
+                    st.rerun()
+            except Exception as exc:
+                st.error(f"Fehler: {exc}")
 
     for action in pending:
         action_id = action.get("id", "")
@@ -921,10 +934,14 @@ def page_knowledge() -> None:
         key="kb_collection",
     )
     kb_list = fetch_json(f"/api/v1/knowledge/list?collection={coll_choice}&limit=200")
-    if kb_list:
+    if kb_list is None:
+        st.warning("Knowledge-API nicht erreichbar")
+    else:
         entries = kb_list.get("entries", [])
         total = kb_list.get("total", 0)
         st.caption(f"{total} Einträge in `{coll_choice}`")
+        if total == 0:
+            st.info("Keine Einträge in dieser Kollektion")
 
         for entry in entries:
             eid = entry.get("id", "?")
@@ -961,8 +978,6 @@ def page_knowledge() -> None:
                             st.error(f"Fehler: {resp.status_code}")
                     except Exception as _e:
                         st.error(f"Fehler: {_e}")
-    elif kb_list is None:
-        st.info("Keine Daten verfügbar")
 
     st.divider()
 

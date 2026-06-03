@@ -387,6 +387,23 @@ async def get_history(
     }
 
 
+@router.delete("/pending/all")
+async def discard_all_pending() -> dict[str, Any]:
+    """Verwirft alle ausstehenden RepairActions (proposed/simulated/validated → rejected)."""
+    from agent_core.repair_store import get_pending_actions, update_action
+    from datetime import UTC, datetime
+
+    pending = get_pending_actions()
+    for action in pending:
+        update_action(action["id"], {
+            "status": "rejected",
+            "approval_decision": False,
+            "approval_reason": "Manuell verworfen (Bulk-Aktion)",
+            "approved_at": datetime.now(UTC).isoformat(),
+        })
+    return {"discarded": len(pending)}
+
+
 @router.get("/actions")
 async def get_all_actions() -> list[dict[str, Any]]:
     """Gibt alle RepairActions zurück (alle Stati)."""
