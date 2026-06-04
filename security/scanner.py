@@ -28,9 +28,17 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str, FindingSeverity]] = [
         "JWT-Token im Klartext",
         FindingSeverity.CRITICAL,
     ),
-    # Allgemeine Passwörter
+    # Allgemeine Passwörter — nur echte Zuweisung mit konkretem Wert
+    # Ausgeschlossen: Typannotationen (:str, :Optional), Standardwerte (=None, ="", ='')
+    # Parameter-Defaults in Funktionsdefinitionen, Placeholder wie "your_password_here"
     (
-        re.compile(r'(?i)(password|passwd|pwd)\s*[:=]\s*["\']?(?!{{\s*)((?!\!secret)[^\s"\'{}]{6,})["\']?'),
+        re.compile(
+            r'(?i)(password|passwd|pwd)\s*[:=]\s*["\']'  # Schlüssel dann = oder : dann Anführungszeichen
+            r'(?!{{\s*)'                                  # kein Jinja2-Template
+            r'(?!\s*$)'                                   # kein leerer Wert
+            r'((?!\!secret)[^\s"\'{}]{8,})'              # mind. 8 Zeichen, kein !secret
+            r'["\']'                                      # schließendes Anführungszeichen (Pflicht)
+        ),
         "Passwort im Klartext",
         FindingSeverity.CRITICAL,
     ),
@@ -469,11 +477,15 @@ def _scan_directory_sync(
     all_issues: list[SecurityIssue] = []
     all_checks = check_types is None
 
-    yaml_files = glob.glob(f"{directory}/**/*.yaml", recursive=True)
-    py_files = glob.glob(f"{directory}/**/*.py", recursive=True)
-    docker_files = glob.glob(f"{directory}/**/Dockerfile", recursive=True)
-    docker_files += glob.glob(f"{directory}/**/docker-compose*.yml", recursive=True)
-    manifest_files = glob.glob(f"{directory}/**/manifest.json", recursive=True)
+    def _is_backup(path: str) -> bool:
+        name = Path(path).name
+        return name.startswith("bak.") or name.endswith(".bak") or ".bak." in name
+
+    yaml_files = [f for f in glob.glob(f"{directory}/**/*.yaml", recursive=True) if not _is_backup(f)]
+    py_files = [f for f in glob.glob(f"{directory}/**/*.py", recursive=True) if not _is_backup(f)]
+    docker_files = [f for f in glob.glob(f"{directory}/**/Dockerfile", recursive=True) if not _is_backup(f)]
+    docker_files += [f for f in glob.glob(f"{directory}/**/docker-compose*.yml", recursive=True) if not _is_backup(f)]
+    manifest_files = [f for f in glob.glob(f"{directory}/**/manifest.json", recursive=True) if not _is_backup(f)]
 
     def _read(path: str) -> str:
         try:

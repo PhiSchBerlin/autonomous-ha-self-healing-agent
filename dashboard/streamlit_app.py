@@ -619,17 +619,19 @@ def page_approvals() -> None:
 
             alternatives = action.get("alternatives", [])
             if alternatives:
-                with st.expander("💡 Verworfene Alternativen"):
-                    for alt in alternatives:
-                        st.markdown(f"- {alt}")
+                st.divider()
+                st.write("**💡 Verworfene Alternativen**")
+                for alt in alternatives:
+                    st.markdown(f"- {alt}")
 
             changes = action.get("changes", [])
             if changes:
-                with st.expander(f"📝 Codeänderungen ({len(changes)} Datei(en))"):
-                    for ch in changes:
-                        st.caption(f"`{ch.get('file_path', '')}` — {ch.get('change_type', 'modify')}")
-                        if ch.get("diff"):
-                            st.code(ch["diff"], language="diff")
+                st.divider()
+                st.write(f"**📝 Codeänderungen ({len(changes)} Datei(en))**")
+                for ch in changes:
+                    st.caption(f"`{ch.get('file_path', '')}` — {ch.get('change_type', 'modify')}")
+                    if ch.get("diff"):
+                        st.code(ch["diff"], language="diff")
 
             if action.get("audit_trail"):
                 st.caption(f"Audit-Trail: {len(action['audit_trail'])} Einträge")
